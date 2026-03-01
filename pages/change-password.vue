@@ -10,43 +10,21 @@
         <v-card-text class="p-6">
           <v-form ref="formRef" @submit.prevent="changePassword">
             <div class="space-y-4">
-              <v-text-field
-                v-model="form.currentPassword"
-                label="現在のパスワード *"
-                :type="showCurrentPassword ? 'text' : 'password'"
-                variant="outlined"
-                :rules="currentPasswordRules"
-                :append-inner-icon="showCurrentPassword ? 'mdi-eye' : 'mdi-eye-off'"
-                autocomplete="current-password"
-                required
-                @click:append-inner="showCurrentPassword = !showCurrentPassword"
-              />
+              <v-text-field v-model="form.currentPassword" label="現在のパスワード *"
+                :type="showCurrentPassword ? 'text' : 'password'" variant="outlined" :rules="currentPasswordRules"
+                :append-inner-icon="showCurrentPassword ? 'mdi-eye' : 'mdi-eye-off'" autocomplete="current-password"
+                required @click:append-inner="showCurrentPassword = !showCurrentPassword" />
 
-              <v-text-field
-                v-model="form.newPassword"
-                label="新しいパスワード *"
-                :type="showNewPassword ? 'text' : 'password'"
-                variant="outlined"
-                :rules="newPasswordRules"
-                :append-inner-icon="showNewPassword ? 'mdi-eye' : 'mdi-eye-off'"
-                autocomplete="new-password"
-                hint="8文字以上、小文字・数字を含む"
-                persistent-hint
-                required
-                @click:append-inner="showNewPassword = !showNewPassword"
-              />
+              <v-text-field v-model="form.newPassword" label="新しいパスワード *" :type="showNewPassword ? 'text' : 'password'"
+                variant="outlined" :rules="newPasswordRules"
+                :append-inner-icon="showNewPassword ? 'mdi-eye' : 'mdi-eye-off'" autocomplete="new-password"
+                hint="8文字以上、小文字・数字を含む" persistent-hint required
+                @click:append-inner="showNewPassword = !showNewPassword" />
 
-              <v-text-field
-                v-model="form.confirmPassword"
-                label="新しいパスワード（確認） *"
-                :type="showConfirmPassword ? 'text' : 'password'"
-                variant="outlined"
-                :rules="confirmPasswordRules"
-                :append-inner-icon="showConfirmPassword ? 'mdi-eye' : 'mdi-eye-off'"
-                autocomplete="new-password"
-                required
-                @click:append-inner="showConfirmPassword = !showConfirmPassword"
-              />
+              <v-text-field v-model="form.confirmPassword" label="新しいパスワード（確認） *"
+                :type="showConfirmPassword ? 'text' : 'password'" variant="outlined" :rules="confirmPasswordRules"
+                :append-inner-icon="showConfirmPassword ? 'mdi-eye' : 'mdi-eye-off'" autocomplete="new-password"
+                required @click:append-inner="showConfirmPassword = !showConfirmPassword" />
             </div>
 
             <!-- Password Strength Indicator -->
@@ -58,11 +36,8 @@
                 </span>
               </div>
               <div class="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  class="h-2 rounded-full transition-all duration-300"
-                  :class="passwordStrengthBarColor"
-                  :style="{ width: `${passwordStrengthPercent}%` }"
-                />
+                <div class="h-2 rounded-full transition-all duration-300" :class="passwordStrengthBarColor"
+                  :style="{ width: `${passwordStrengthPercent}%` }" />
               </div>
             </div>
 
@@ -71,44 +46,28 @@
               <p class="text-sm font-medium text-gray-700 mb-2">パスワード要件:</p>
               <ul class="text-sm text-gray-600 space-y-1">
                 <li class="flex items-center">
-                  <Icon 
-                    :name="form.newPassword.length >= 8 ? 'mdi:check-circle' : 'mdi:circle-outline'" 
-                    :class="form.newPassword.length >= 8 ? 'text-green-500' : 'text-gray-400'"
-                    class="mr-2"
-                  />
+                  <Icon :name="form.newPassword.length >= 8 ? 'mdi:check-circle' : 'mdi:circle-outline'"
+                    :class="form.newPassword.length >= 8 ? 'text-green-500' : 'text-gray-400'" class="mr-2" />
                   8文字以上
                 </li>
                 <li class="flex items-center">
-                  <Icon 
-                    :name="/(?=.*[a-z])/.test(form.newPassword) ? 'mdi:check-circle' : 'mdi:circle-outline'" 
-                    :class="/(?=.*[a-z])/.test(form.newPassword) ? 'text-green-500' : 'text-gray-400'"
-                    class="mr-2"
-                  />
+                  <Icon :name="/(?=.*[a-z])/.test(form.newPassword) ? 'mdi:check-circle' : 'mdi:circle-outline'"
+                    :class="/(?=.*[a-z])/.test(form.newPassword) ? 'text-green-500' : 'text-gray-400'" class="mr-2" />
                   小文字を含む
                 </li>
                 <li class="flex items-center">
-                  <Icon 
-                    :name="/(?=.*\d)/.test(form.newPassword) ? 'mdi:check-circle' : 'mdi:circle-outline'" 
-                    :class="/(?=.*\d)/.test(form.newPassword) ? 'text-green-500' : 'text-gray-400'"
-                    class="mr-2"
-                  />
+                  <Icon :name="/(?=.*\d)/.test(form.newPassword) ? 'mdi:check-circle' : 'mdi:circle-outline'"
+                    :class="/(?=.*\d)/.test(form.newPassword) ? 'text-green-500' : 'text-gray-400'" class="mr-2" />
                   数字を含む
                 </li>
               </ul>
             </div>
 
             <div class="flex items-center justify-between pt-6">
-              <v-btn
-                variant="outlined"
-                to="/profile"
-              >
+              <v-btn variant="outlined" to="/profile">
                 キャンセル
               </v-btn>
-              <v-btn
-                color="primary"
-                :loading="loading"
-                @click="changePassword"
-              >
+              <v-btn color="primary" :loading="loading" @click="changePassword">
                 パスワードを変更
               </v-btn>
             </div>
@@ -187,11 +146,11 @@ const passwordStrengthScore = computed(() => {
   if (!password) return 0
 
   let score = 0
-  
+
   // Length
   if (password.length >= 8) score += 1
   if (password.length >= 12) score += 1
-  
+
   // Character types
   if (/[a-z]/.test(password)) score += 1
   if (/[A-Z]/.test(password)) score += 1
@@ -232,33 +191,59 @@ const changePassword = async () => {
   if (!valid) return
 
   loading.value = true
-  
+
   try {
     const requestData: ChangePasswordRequest = {
       currentPassword: form.currentPassword,
       newPassword: form.newPassword
     }
 
-    await apiClient.post('/auth/change-password', requestData)
+    const response = await apiClient.post<Record<string, unknown>>('/auth/change-password', requestData)
+
+    const rawResponse = response as Record<string, unknown>
+    if (
+      rawResponse?.error ||
+      (typeof rawResponse?.statusCode === 'number' && rawResponse.statusCode >= 400) ||
+      (typeof rawResponse?.status === 'number' && rawResponse.status >= 400) ||
+      (rawResponse?.data && typeof (rawResponse.data as Record<string, unknown>)?.statusCode === 'number' && (rawResponse.data as Record<string, unknown>).statusCode as number >= 400) ||
+      (rawResponse?.data && typeof (rawResponse.data as Record<string, unknown>)?.status === 'number' && (rawResponse.data as Record<string, unknown>).status as number >= 400)
+    ) {
+      throw rawResponse?.error || rawResponse?.data || rawResponse
+    }
 
     showSuccess('パスワードを変更しました')
-    
+
     // Reset form
     form.currentPassword = ''
     form.newPassword = ''
     form.confirmPassword = ''
     formRef.value?.resetValidation()
-    
+
     // Redirect to profile
     await navigateTo('/profile')
   } catch (error: unknown) {
     logger.error('パスワードの変更に失敗しました:', error)
-    
-    if (error && typeof error === 'object' && 'data' in error) {
-      const errorData = error.data as { statusMessage?: string }
-      if (errorData?.statusMessage === 'Current password is incorrect') {
+
+    if (error && typeof error === 'object') {
+      // サーバーエラーレスポンスのパース
+      const err = error as { data?: unknown, response?: { _data?: unknown } }
+      const errorData = (err.data || err.response?._data || err) as { statusMessage?: unknown, message?: unknown }
+      const statusMessage = typeof errorData.statusMessage === 'string'
+        ? errorData.statusMessage
+        : (typeof errorData.message === 'string' ? errorData.message : '')
+
+      if (statusMessage === 'Current password is incorrect') {
         showError('現在のパスワードが正しくありません')
-      } else if (errorData?.statusMessage?.includes('password does not meet requirements')) {
+      } else if (statusMessage === 'New password must be different from current password') {
+        showError('新しいパスワードは現在のパスワードと異なる必要があります')
+      } else if (statusMessage === 'Current password and new password are required') {
+        showError('パスワードを入力してください')
+      } else if (statusMessage === 'Session not found' || statusMessage === 'Access token not found') {
+        showError('セッションが切れました。再度ログインしてください')
+      } else if (statusMessage.includes('password does not meet requirements') ||
+        statusMessage.includes('least 8 characters long') ||
+        statusMessage.includes('lowercase letter') ||
+        statusMessage.includes('one number')) {
         showError('新しいパスワードが要件を満たしていません')
       } else {
         showError('パスワードの変更に失敗しました')

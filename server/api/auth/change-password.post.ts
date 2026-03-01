@@ -43,8 +43,19 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Get access token from cookie
-    const accessToken = getCookie(event, 'access_token')
+    // Get session ID from cookie
+    const sessionId = getCookie(event, 'session_id')
+    
+    if (!sessionId) {
+      throw createError({
+        statusCode: 401,
+        statusMessage: 'Session not found'
+      })
+    }
+
+    // Get session details
+    const session = await getSessionDetails(sessionId)
+    const accessToken = session?.cognito_access_token
     
     if (!accessToken) {
       throw createError({
