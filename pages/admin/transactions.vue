@@ -143,7 +143,9 @@ import {
   getTransactionTypeIcon,
   getTransactionTypeTextColor,
   getTransactionTypeSign,
-  getTransactionTypeVuetifyColor
+  getTransactionTypeVuetifyColor,
+  isApprovedTransaction,
+  reduceTransactionsBtc
 } from '~/utils/transaction'
 
 definePageMeta({
@@ -209,64 +211,26 @@ const headers = [
 // 算出プロパティ（Computed）
 // サーバーサイドフィルタリングに移行するため削除
 
-// Helper function to determine if transaction is approved
-const isApprovedTransaction = (transaction: Transaction): boolean => {
-  return !transaction.status || transaction.status === 'approved'
-}
-
 // 全体統計（承認待ち含む）
-const todayTransactionCount = computed(() => {
+const todayTransactionsList = computed(() => {
   const today = new Date().toDateString()
-  return transactions.value.filter(t =>
-    new Date(t.timestamp).toDateString() === today
-  ).length
+  return transactions.value.filter(t => new Date(t.timestamp).toDateString() === today)
 })
 
-const todayDepositTotal = computed(() => {
-  const today = new Date().toDateString()
-  return transactions.value
-    .filter(t => new Date(t.timestamp).toDateString() === today && t.transaction_type === 'deposit')
-    .reduce((sum, t) => sum + t.amount, 0)
-})
-
-const todayWithdrawalTotal = computed(() => {
-  const today = new Date().toDateString()
-  return transactions.value
-    .filter(t => new Date(t.timestamp).toDateString() === today && t.transaction_type === 'withdrawal')
-    .reduce((sum, t) => sum + t.amount, 0)
-})
+const todayTransactionCount = computed(() => todayTransactionsList.value.length)
+const todayDepositTotal = computed(() => reduceTransactionsBtc(todayTransactionsList.value, 'deposit'))
+const todayWithdrawalTotal = computed(() => reduceTransactionsBtc(todayTransactionsList.value, 'withdrawal'))
 
 const totalTransactions = computed(() => totalCount.value)
 
 // 承認済み統計
-const todayApprovedCount = computed(() => {
-  const today = new Date().toDateString()
-  return transactions.value.filter(t =>
-    new Date(t.timestamp).toDateString() === today && isApprovedTransaction(t)
-  ).length
+const todayApprovedTransactionsList = computed(() => {
+  return todayTransactionsList.value.filter(isApprovedTransaction)
 })
 
-const todayApprovedDepositTotal = computed(() => {
-  const today = new Date().toDateString()
-  return transactions.value
-    .filter(t =>
-      new Date(t.timestamp).toDateString() === today &&
-      t.transaction_type === 'deposit' &&
-      isApprovedTransaction(t)
-    )
-    .reduce((sum, t) => sum + t.amount, 0)
-})
-
-const todayApprovedWithdrawalTotal = computed(() => {
-  const today = new Date().toDateString()
-  return transactions.value
-    .filter(t =>
-      new Date(t.timestamp).toDateString() === today &&
-      t.transaction_type === 'withdrawal' &&
-      isApprovedTransaction(t)
-    )
-    .reduce((sum, t) => sum + t.amount, 0)
-})
+const todayApprovedCount = computed(() => todayApprovedTransactionsList.value.length)
+const todayApprovedDepositTotal = computed(() => reduceTransactionsBtc(todayApprovedTransactionsList.value, 'deposit'))
+const todayApprovedWithdrawalTotal = computed(() => reduceTransactionsBtc(todayApprovedTransactionsList.value, 'withdrawal'))
 
 const pendingTransactionCount = computed(() => {
   return transactions.value.filter(t => t.status === 'pending').length

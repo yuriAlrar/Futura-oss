@@ -27,7 +27,8 @@ export function calculateBalance(transactions: Transaction[]): number {
     if (transaction.transaction_type === 'deposit') {
       return balance + transaction.amount
     } else if (transaction.transaction_type === 'withdrawal') {
-      return balance - transaction.amount
+      // 出金の場合はDBに負の値として保存されているため、そのまま加算する（例: balance + (-1000)）
+      return balance + transaction.amount
     } else if (transaction.transaction_type === 'asset_management') {
       // 資産運用: amountが正負の値を持つのでそのまま加算
       return balance + transaction.amount

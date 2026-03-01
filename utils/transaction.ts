@@ -95,3 +95,41 @@ export function getTransactionTypeVuetifyColor(transactionType: Transaction['tra
       return 'grey'
   }
 }
+
+// ----------------------------------------------------------------------------
+// 計算・判定ユーティリティ
+// ----------------------------------------------------------------------------
+
+const BTC_PRECISION = 100000000 // 特別に定義するBTCの小数点8桁分の乗数（浮動小数計算エラー防止用）
+
+/**
+ * 複数の数値（BTC）の合計を、浮動小数点の丸め誤差を出さずに正確に計算する
+ * （例: 0.1 + 0.2 などで 0.300000000000004 になるのを防ぐ）
+ */
+export function calculateBtcSum(amounts: number[]): number {
+  const sumInt = amounts.reduce((acc, val) => acc + Math.round(val * BTC_PRECISION), 0)
+  console.log(sumInt, sumInt / BTC_PRECISION)
+  return sumInt / BTC_PRECISION
+}
+
+/**
+ * トランザクションが承認済み（または以前のバージョンによるステータス未定義）か判定する
+ */
+// バックエンドのTransaction型に近い形で判定
+export function isApprovedTransaction(transaction: { status?: string }): boolean {
+  return !transaction.status || transaction.status === 'approved'
+}
+
+/**
+ * トランザクション配列から、出金などの種別ごとに金額（amount）だけを抽出し、正確に加算する
+ *
+ * target_type に 'deposit', 'withdrawal' 等を指定するか、指定なしで全合計を出す
+ */
+export function reduceTransactionsBtc(transactions: any[], targetType?: string): number {
+  const filtered = targetType
+    ? transactions.filter(t => t.transaction_type === targetType)
+    : transactions
+
+  const amounts = filtered.map(t => t.amount)
+  return calculateBtcSum(amounts)
+}

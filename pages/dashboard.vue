@@ -243,7 +243,8 @@ import {
   getTransactionTypeColor,
   getTransactionTypeIcon,
   getTransactionTypeTextColor,
-  getTransactionTypeSign
+  getTransactionTypeSign,
+  calculateBtcSum
 } from '~/utils/transaction'
 import { formatNumber, formatBTC } from '~/utils/format'
 
@@ -344,7 +345,8 @@ const minBTCBalance = computed(() => {
 
 const avgBTCBalance = computed(() => {
   if (!dashboardData.value?.balanceHistory.length) return 0
-  const sum = dashboardData.value.balanceHistory.reduce((acc, item) => acc + item.btc_amount, 0)
+  const amounts = dashboardData.value.balanceHistory.map(item => item.btc_amount)
+  const sum = calculateBtcSum(amounts)
   return sum / dashboardData.value.balanceHistory.length
 })
 

@@ -111,9 +111,9 @@
           </div>
         </template>
 
-        <template #[`item.running_balance`]="{ index }">
+        <template #[`item.running_balance`]="{ item }">
           <span class="font-mono text-sm text-gray-600">
-            {{ formatBTC(getRunningBalance(index)) }} BTC
+            {{ formatBTC(getRunningBalance(item)) }} BTC
           </span>
         </template>
 
@@ -136,7 +136,10 @@ import {
   getTransactionTypeIcon,
   getTransactionTypeTextColor,
   getTransactionTypeSign,
-  getTransactionTypeVuetifyColor
+  getTransactionTypeVuetifyColor,
+  isApprovedTransaction,
+  calculateBtcSum,
+  reduceTransactionsBtc
 } from '~/utils/transaction'
 import { formatBTC } from '~/utils/format'
 
@@ -217,41 +220,17 @@ const filteredTransactions = computed(() => {
   return filtered
 })
 
-// Helper function to determine if transaction is approved
-const isApprovedTransaction = (transaction: Transaction): boolean => {
-  return !transaction.status || transaction.status === 'approved'
-}
-
 const totalTransactions = computed(() => transactions.value.length)
 
-const totalDeposits = computed(() =>
-  transactions.value
-    .filter(t => t.transaction_type === 'deposit')
-    .reduce((sum, t) => sum + t.amount, 0)
-)
-
-const totalWithdrawals = computed(() =>
-  transactions.value
-    .filter(t => t.transaction_type === 'withdrawal')
-    .reduce((sum, t) => sum + t.amount, 0)
-)
+const totalDeposits = computed(() => reduceTransactionsBtc(transactions.value, 'deposit'))
+const totalWithdrawals = computed(() => reduceTransactionsBtc(transactions.value, 'withdrawal'))
 
 // 承認済み統計
-const approvedTransactionCount = computed(() => {
-  return transactions.value.filter(t => isApprovedTransaction(t)).length
-})
+const approvedTransactionsList = computed(() => transactions.value.filter(t => isApprovedTransaction(t)))
 
-const approvedDeposits = computed(() =>
-  transactions.value
-    .filter(t => t.transaction_type === 'deposit' && isApprovedTransaction(t))
-    .reduce((sum, t) => sum + t.amount, 0)
-)
-
-const approvedWithdrawals = computed(() =>
-  transactions.value
-    .filter(t => t.transaction_type === 'withdrawal' && isApprovedTransaction(t))
-    .reduce((sum, t) => sum + t.amount, 0)
-)
+const approvedTransactionCount = computed(() => approvedTransactionsList.value.length)
+const approvedDeposits = computed(() => reduceTransactionsBtc(approvedTransactionsList.value, 'deposit'))
+const approvedWithdrawals = computed(() => reduceTransactionsBtc(approvedTransactionsList.value, 'withdrawal'))
 
 const pendingTransactionCount = computed(() => {
   return transactions.value.filter(t => t.status === 'pending').length
@@ -297,24 +276,28 @@ const loadTransactions = async () => {
   }
 }
 
-const getRunningBalance = (index: number) => {
-  // Calculate running balance up to this transaction
-  // Note: transactions are sorted by timestamp descending, so we need to reverse the calculation
-  const reversedIndex = filteredTransactions.value.length - 1 - index
-  let balance = 0
+const getRunningBalance = (targetItem: Transaction) => {
+  // すべての履歴（transactions.value）からこの取引の実際のインデックスを探す
+  const targetIndex = transactions.value.findIndex(t => t.transaction_id === targetItem.transaction_id)
+  if (targetIndex === -1) return 0
 
-  for (let i = filteredTransactions.value.length - 1; i >= reversedIndex; i--) {
-    const transaction = filteredTransactions.value[i]
-    if (transaction.transaction_type === 'deposit') {
-      balance += transaction.amount
-    } else if (transaction.transaction_type === 'withdrawal') {
-      balance -= transaction.amount
-    } else if (transaction.transaction_type === 'asset_management') {
-      balance += transaction.amount
+  const amountsToSum: number[] = []
+
+  // transactions.value は新しいものが配列の先頭(index: 0)に来るため、
+  // 一番古いもの(length - 1)から、対象の取引(targetIndex)まで遡って拾う
+  for (let i = transactions.value.length - 1; i >= targetIndex; i--) {
+    const transaction = transactions.value[i]
+
+    // 承認済み取引のみ残高に反映
+    if (isApprovedTransaction(transaction)) {
+      if (['deposit', 'withdrawal', 'asset_management'].includes(transaction.transaction_type)) {
+        amountsToSum.push(transaction.amount) // withdrawal はマイナス値なのでそのままPush
+      }
     }
   }
 
-  return balance
+  // 浮動小数点誤差を防ぐ共通関数で合算する
+  return calculateBtcSum(amountsToSum)
 }
 
 const viewTransactionDetails = (transaction: Transaction) => {
