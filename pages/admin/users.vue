@@ -52,13 +52,13 @@
             <v-btn size="small" variant="text" color="info" icon="mdi-information-outline"
               @click="openUserDetailsDialog(item)" />
             <v-btn v-if="item.status === 'active'" size="small" variant="text" color="warning" icon="mdi-pause"
-              @click="suspendUser(item)" />
+              :disabled="item.user_id === user?.user_id" @click="suspendUser(item)" />
             <v-btn v-if="item.status === 'suspended'" size="small" variant="text" color="success" icon="mdi-play"
               @click="activateUser(item)" />
             <v-btn size="small" variant="text" color="info" icon="mdi-lock-reset"
               @click="openResetPasswordDialog(item)" />
             <v-btn v-if="item.status !== 'deleted'" size="small" variant="text" color="error" icon="mdi-delete"
-              @click="deleteUser(item)" />
+              :disabled="item.user_id === user?.user_id" @click="deleteUser(item)" />
           </div>
         </template>
       </v-data-table-server>
@@ -85,6 +85,7 @@ import type { User, PaginatedResponse } from '~/types'
 
 const logger = useLogger({ prefix: '[PAGE-ADMIN-USERS]' })
 const apiClient = useApiClient()
+const { user } = useAuth()
 
 definePageMeta({
   middleware: 'auth',
@@ -174,9 +175,13 @@ watch([selectedStatus, searchQuery], () => {
 
 const suspendUser = async (user: User) => {
   try {
-    await apiClient.post(`/admin/users/${user.user_id}/suspend`)
-    showSuccess(`${user.name}を停止しました`)
-    await loadUsers()
+    const response = await apiClient.post(`/admin/users/${user.user_id}/suspend`)
+    if (response.success) {
+      showSuccess(`${user.name}を停止しました`)
+      await loadUsers()
+    } else {
+      showError(response.error || 'ユーザーの停止に失敗しました')
+    }
   } catch (error) {
     logger.error('ユーザーの停止に失敗しました:', error)
     showError('ユーザーの停止に失敗しました')
@@ -185,9 +190,13 @@ const suspendUser = async (user: User) => {
 
 const activateUser = async (user: User) => {
   try {
-    await apiClient.post(`/admin/users/${user.user_id}/activate`)
-    showSuccess(`${user.name}を有効化しました`)
-    await loadUsers()
+    const response = await apiClient.post(`/admin/users/${user.user_id}/activate`)
+    if (response.success) {
+      showSuccess(`${user.name}を有効化しました`)
+      await loadUsers()
+    } else {
+      showError(response.error || 'ユーザーの有効化に失敗しました')
+    }
   } catch (error) {
     logger.error('ユーザーの有効化に失敗しました:', error)
     showError('ユーザーの有効化に失敗しました')
@@ -200,9 +209,13 @@ const deleteUser = async (user: User) => {
   }
 
   try {
-    await apiClient.post(`/admin/users/${user.user_id}/delete`)
-    showSuccess(`${user.name}を削除しました`)
-    await loadUsers()
+    const response = await apiClient.post(`/admin/users/${user.user_id}/delete`)
+    if (response.success) {
+      showSuccess(`${user.name}を削除しました`)
+      await loadUsers()
+    } else {
+      showError(response.error || 'ユーザーの削除に失敗しました')
+    }
   } catch (error) {
     logger.error('ユーザーの削除に失敗しました:', error)
     showError('ユーザーの削除に失敗しました')

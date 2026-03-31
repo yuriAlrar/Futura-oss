@@ -4,14 +4,22 @@ import { getDynamoDBService } from '~/server/utils/dynamodb'
 
 export default defineEventHandler(async (event) => {
   // Require admin permission
-  await requirePermission(event, 'user:delete')
+  const currentUser = await requirePermission(event, 'user:delete')
 
-      const userId = getRouterParam(event, 'userId')
+  const userId = getRouterParam(event, 'userId')
   
   if (!userId) {
     throw createError({
       statusCode: 400,
       statusMessage: 'User ID is required'
+    })
+  }
+
+  // 自分自身を削除しようとしていないかチェック
+  if (currentUser.user_id === userId) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Cannot delete yourself'
     })
   }
   

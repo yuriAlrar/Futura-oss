@@ -100,7 +100,7 @@ export const useApiClient = (options: ApiClientOptions = {}) => {
           errorData = { message: errorText }
         }
 
-        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`)
+        throw new Error(errorData.statusMessage || errorData.message || `HTTP ${response.status}: ${response.statusText}`)
       }
 
       const data = await response.json()

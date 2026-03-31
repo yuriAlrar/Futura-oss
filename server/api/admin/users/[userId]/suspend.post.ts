@@ -5,7 +5,7 @@ import { getDynamoDBService } from '~/server/utils/dynamodb'
 export default defineEventHandler(async (event) => {
   try {
     // 管理者権限が必要
-    await requirePermission(event, 'user:update')
+    const currentUser = await requirePermission(event, 'user:update')
 
     const userId = getRouterParam(event, 'userId')
     
@@ -21,6 +21,14 @@ export default defineEventHandler(async (event) => {
 
     const dynamodb = getDynamoDBService()
     const tableName = dynamodb.getTableName('users')
+
+    // 自分自身を停止しようとしていないかチェック
+    if (currentUser.user_id === userId) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Cannot suspend yourself'
+      })
+    }
 
     // メールアドレス取得のためDynamoDBからユーザーを取得
     const user = await dynamodb.get(tableName, { user_id: userId })
