@@ -27,6 +27,14 @@
               persistent-hint
               clearable
             />
+            <div
+              v-if="targetSegmentId"
+              class="d-flex align-center mt-2 pa-3 rounded"
+              style="background-color: rgba(var(--v-theme-primary), 0.08); border: 1px solid rgba(var(--v-theme-primary), 0.3);"
+            >
+              <Icon name="mdi:information-outline" class="text-primary mr-2 flex-shrink-0" />
+              <span class="text-body-2">{{ selectedSegmentDescription || '説明が設定されていません' }}</span>
+            </div>
           </v-col>
 
           <v-col cols="12" md="6">
@@ -104,6 +112,9 @@
                 <v-list-item-title>対象</v-list-item-title>
                 <v-list-item-subtitle>{{ selectedSegmentName || '全アクティブユーザー' }}</v-list-item-subtitle>
               </v-list-item>
+              <v-list-item v-if="targetSegmentId">
+                <v-list-item-subtitle>{{ selectedSegmentDescription || '説明が設定されていません' }}</v-list-item-subtitle>
+              </v-list-item>
               <v-list-item>
                 <v-list-item-title>増減率</v-list-item-title>
                 <v-list-item-subtitle class="text-h6">
@@ -178,6 +189,10 @@ const segmentOptions = computed(() =>
 
 const selectedSegmentName = computed(() => {
   return segments.value.find(s => s.segment_id === targetSegmentId.value)?.name || ''
+})
+
+const selectedSegmentDescription = computed(() => {
+  return segments.value.find(s => s.segment_id === targetSegmentId.value)?.description || ''
 })
 
 const targetDescription = computed(() => {
