@@ -143,9 +143,12 @@ export default defineNuxtConfig({
     }
   },
 
-  // Nitro configuration for Lambda deployment
+  // Nitro configuration for AWS Amplify Hosting (compute + static hosting)
+  // 'aws-lambda' preset is for direct API Gateway/ALB Lambda integration and is NOT
+  // compatible with Amplify Hosting's SSR deployment specification — Amplify auto-detects
+  // Nuxt apps and expects the .amplify-hosting/{static,compute,deploy-manifest.json}
+  // structure that only the 'aws-amplify' preset produces.
   nitro: {
-    preset: 'aws-lambda',
-    serveStatic: true
+    preset: 'aws-amplify'
   }
 })
