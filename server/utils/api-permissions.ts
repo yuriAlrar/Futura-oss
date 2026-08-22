@@ -111,6 +111,10 @@ export const API_PERMISSIONS: APIPermissions = {
     'GET': { authOnly: true },
     'POST': { permissions: ['account:create-sub'] }
   },
+
+  '/api/account/parent': {
+    'GET': { authOnly: true }
+  },
   
   '/api/admin/system/sync-cognito': {
     'POST': { permissions: ['admin:access'] }

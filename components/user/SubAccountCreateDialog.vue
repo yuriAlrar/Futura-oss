@@ -15,8 +15,6 @@
             <v-text-field v-model="form.email" label="メールアドレス *" type="email" variant="outlined" :rules="emailRules"
               hint="本アカウントとは別のメールアドレスが必要です" persistent-hint required />
             <v-text-field v-model="form.name" label="氏名 *" variant="outlined" :rules="nameRules" required />
-            <v-textarea v-model="form.address" label="住所 *" variant="outlined" rows="3" :rules="addressRules" required />
-            <v-text-field v-model="form.phone_number" label="電話番号 *" variant="outlined" :rules="phoneRules" required />
           </div>
         </v-form>
       </v-card-text>
@@ -79,9 +77,7 @@ const createdResult = ref<SubAccountCreateResult | null>(null)
 
 const form = reactive<SubAccountCreateForm>({
   email: '',
-  name: '',
-  address: '',
-  phone_number: ''
+  name: ''
 })
 
 const emailRules = [
@@ -93,19 +89,9 @@ const nameRules = [
   (v: string) => !!v || '氏名は必須です'
 ]
 
-const addressRules = [
-  (v: string) => !!v || '住所は必須です'
-]
-
-const phoneRules = [
-  (v: string) => !!v || '電話番号は必須です'
-]
-
 const resetForm = () => {
   form.email = ''
   form.name = ''
-  form.address = ''
-  form.phone_number = ''
   createdResult.value = null
   formRef.value?.resetValidation()
 }
@@ -126,10 +112,16 @@ const submit = async () => {
   loading.value = true
   try {
     const response = await apiClient.post<SubAccountCreateResult>('/account/sub-accounts', form)
+
+    if (!response.success) {
+      showError(response.statusCode === 403 ? 'サブアカウントからさらにサブアカウントを作成することはできません' : (response.error || 'サブアカウントの作成に失敗しました'))
+      return
+    }
+
     createdResult.value = response.data!
   } catch (error: any) {
     logger.error('サブアカウント作成エラー:', error)
-    showError(error?.data?.statusMessage || 'サブアカウントの作成に失敗しました')
+    showError('サブアカウントの作成に失敗しました')
   } finally {
     loading.value = false
   }

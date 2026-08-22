@@ -200,9 +200,18 @@ const adjustmentRateRules = [
 const loadSegments = async () => {
   try {
     const response = await apiClient.get<{ items: SegmentWithMemberCount[] }>('/admin/segments')
+
+    if (!response.success) {
+      errorMessage.value = response.statusCode === 403
+        ? 'セグメント一覧を閲覧する権限がないため、対象セグメントを選択できません（全アクティブユーザーのみ対象にできます）'
+        : (response.error || 'セグメント一覧の取得に失敗しました')
+      return
+    }
+
     segments.value = response.data?.items || []
   } catch (error) {
     logger.error('セグメント一覧の取得に失敗しました:', error)
+    errorMessage.value = 'セグメント一覧の取得に失敗しました'
   }
 }
 
@@ -240,21 +249,26 @@ async function executeBatchOperation() {
       payload
     )
 
-    if (response.success) {
-      showConfirmDialog.value = false
-      adjustmentRate.value = 0
-      memo.value = ''
-      targetSegmentId.value = null
-      emit('success')
-
-      // Show success message
-      const result = response.data! as BatchOperationResult
-      const successMsg = `一括処理が完了しました。成功: ${result.processed_user_count}件, 失敗: ${result.failed_user_count}件`
-      logger.info(successMsg)
+    if (!response.success) {
+      errorMessage.value = response.statusCode === 403
+        ? '一括資産調整を実行する権限がありません'
+        : (response.error || '一括処理の実行に失敗しました')
+      return
     }
+
+    showConfirmDialog.value = false
+    adjustmentRate.value = 0
+    memo.value = ''
+    targetSegmentId.value = null
+    emit('success')
+
+    // Show success message
+    const result = response.data! as BatchOperationResult
+    const successMsg = `一括処理が完了しました。成功: ${result.processed_user_count}件, 失敗: ${result.failed_user_count}件`
+    logger.info(successMsg)
   } catch (error: any) {
     logger.error('一括処理実行エラー:', error)
-    errorMessage.value = error.data?.statusMessage || error.message || '一括処理の実行に失敗しました'
+    errorMessage.value = '一括処理の実行に失敗しました'
   } finally {
     loading.value = false
   }

@@ -29,10 +29,10 @@
         <v-text-field v-model="form.email" label="メールアドレス *" type="email" variant="outlined" :rules="emailRules"
           required />
         <v-text-field v-model="form.name" label="氏名 *" variant="outlined" :rules="nameRules" required />
-        <v-textarea v-model="form.address" label="住所 *" variant="outlined" rows="3" :rules="addressRules" required />
         <v-text-field v-model="form.phone_number" label="電話番号 *" variant="outlined" :rules="phoneRules" required />
-        <v-text-field v-model="form.password" label="パスワード *" type="password" variant="outlined" :rules="passwordRules"
-          hint="8文字以上、小文字と数字を含めてください" persistent-hint required />
+
+        <CommonPasswordField v-model="form.password" label="パスワード *" :rules="passwordRules" confirm
+          autocomplete="new-password" hint="8文字以上、小文字と数字を含めてください" />
 
         <v-btn type="submit" color="primary" block size="large" :loading="loading">
           登録する
@@ -66,11 +66,11 @@ const registered = ref(false)
 const loading = ref(false)
 const formRef = ref<any>(null)
 
+// 住所はこの時点では収集しない（プロフィール画面で後から入力する想定）
 const form = reactive<PublicRegisterForm>({
   invite_code: inviteCode,
   email: '',
   name: '',
-  address: '',
   phone_number: '',
   password: ''
 })
@@ -82,10 +82,6 @@ const emailRules = [
 
 const nameRules = [
   (v: string) => !!v || '氏名は必須です'
-]
-
-const addressRules = [
-  (v: string) => !!v || '住所は必須です'
 ]
 
 const phoneRules = [
@@ -109,7 +105,7 @@ const checkInvite = async () => {
   checkingInvite.value = true
   try {
     const response = await apiClient.get<{ valid: boolean }>(`/public/invites/${encodeURIComponent(inviteCode)}`)
-    inviteValid.value = !!response.data?.valid
+    inviteValid.value = response.success && !!response.data?.valid
   } catch (error) {
     logger.error('招待コード確認エラー:', error)
     inviteValid.value = false
@@ -124,11 +120,17 @@ const submit = async () => {
 
   loading.value = true
   try {
-    await apiClient.post('/public/register', form)
+    const response = await apiClient.post('/public/register', form)
+
+    if (!response.success) {
+      showError(response.error || '登録に失敗しました')
+      return
+    }
+
     registered.value = true
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error('登録エラー:', error)
-    showError(error?.data?.statusMessage || '登録に失敗しました')
+    showError('登録に失敗しました')
   } finally {
     loading.value = false
   }

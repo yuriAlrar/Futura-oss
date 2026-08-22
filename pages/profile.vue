@@ -184,8 +184,31 @@
       </div>
     </div>
 
-    <!-- Sub-Accounts -->
-    <div class="mt-6">
+    <!-- Parent Account (サブアカウントの場合のみ表示。サブアカウントからさらにサブアカウントは作成できない) -->
+    <div v-if="profile?.parent_user_id" class="mt-6">
+      <v-card class="card-shadow">
+        <v-card-title class="px-6 py-4 border-b">
+          <h3 class="text-lg font-semibold text-gray-900">親アカウント</h3>
+        </v-card-title>
+        <v-card-text class="p-6">
+          <div v-if="loadingParentAccount" class="text-center py-6">
+            <v-progress-circular indeterminate color="primary" />
+          </div>
+          <div v-else-if="!parentAccount" class="text-center py-6 text-gray-500">
+            親アカウント情報を取得できませんでした
+          </div>
+          <div v-else class="flex items-center justify-between p-3 border rounded-lg">
+            <div>
+              <p class="font-medium text-gray-900">{{ parentAccount.name }}</p>
+              <p class="text-sm text-gray-500">{{ parentAccount.email }}</p>
+            </div>
+          </div>
+        </v-card-text>
+      </v-card>
+    </div>
+
+    <!-- Sub-Accounts (本アカウントのみ表示) -->
+    <div v-else class="mt-6">
       <v-card class="card-shadow">
         <v-card-title class="px-6 py-4 border-b flex items-center justify-between">
           <h3 class="text-lg font-semibold text-gray-900">サブアカウント</h3>
@@ -259,6 +282,8 @@ const showImageDialog = ref(false)
 const showSubAccountDialog = ref(false)
 const subAccounts = ref<User[]>([])
 const loadingSubAccounts = ref(false)
+const parentAccount = ref<{ user_id: string, name: string, email: string } | null>(null)
+const loadingParentAccount = ref(false)
 const formRef = ref()
 const fileInput = ref<HTMLInputElement>()
 
@@ -460,9 +485,27 @@ const loadSubAccounts = async () => {
   }
 }
 
+const loadParentAccount = async () => {
+  loadingParentAccount.value = true
+  try {
+    const response = await apiClient.get<{ user_id: string, name: string, email: string } | null>('/account/parent')
+    parentAccount.value = response.success ? (response.data ?? null) : null
+  } catch (error: unknown) {
+    logger.error('親アカウント情報の読み込みに失敗しました:', error)
+    parentAccount.value = null
+  } finally {
+    loadingParentAccount.value = false
+  }
+}
+
 // Load profile on mount
-onMounted(() => {
-  loadProfile()
-  loadSubAccounts()
+onMounted(async () => {
+  await loadProfile()
+
+  if (profile.value?.parent_user_id) {
+    loadParentAccount()
+  } else {
+    loadSubAccounts()
+  }
 })
 </script>

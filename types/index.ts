@@ -463,7 +463,6 @@ export interface PublicRegisterForm {
   invite_code: string
   email: string
   name: string
-  address: string
   phone_number: string
   password: string
 }
@@ -475,8 +474,6 @@ export interface PublicRegisterForm {
 export interface SubAccountCreateForm {
   email: string
   name: string
-  address: string
-  phone_number: string
 }
 
 export interface SubAccountCreateResult {

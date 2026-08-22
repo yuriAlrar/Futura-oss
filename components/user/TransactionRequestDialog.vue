@@ -35,6 +35,11 @@
               <v-alert v-if="isInsufficientBalance" type="error" variant="tonal" density="compact" class="mt-2">
                 残高が不足しています。最大出金可能額: {{ formatNumber(safeCurrentBalance) }}円
               </v-alert>
+
+              <!-- Deposit Blocked by Unapproved Profile -->
+              <v-alert v-if="isDepositBlockedByApproval" type="warning" variant="tonal" density="compact" class="mt-2">
+                プロフィールが未承認のため、入金リクエストを送信できません。管理者の承認をお待ちください。
+              </v-alert>
             </div>
 
             <v-select v-model="form.reason" :items="reasonOptions"
@@ -65,7 +70,7 @@
         </button>
         <button type="button"
           class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-          :disabled="loading" @click="submitRequest">
+          :disabled="loading || isDepositBlockedByApproval" @click="submitRequest">
           <span v-if="loading">送信中...</span>
           <span v-else>リクエスト送信</span>
         </button>
@@ -92,6 +97,7 @@ defineProps<{
 const formRef = ref<any>(null)
 const loading = ref(false)
 const currentBalance = ref<number | null>(null)
+const profileApproved = ref<boolean | null>(null)
 const apiClient = useApiClient()
 
 const form = ref<TransactionRequestForm>({
@@ -158,6 +164,11 @@ const isInsufficientBalance = computed(() => {
     Math.abs(form.value.amount) > safeCurrentBalance.value
 })
 
+// プロフィールが未承認の場合、入金リクエストは送信不可
+const isDepositBlockedByApproval = computed(() => {
+  return form.value.transaction_type === 'deposit' && profileApproved.value === false
+})
+
 // Fetch current user balance
 const fetchUserBalance = async () => {
   try {
@@ -167,6 +178,12 @@ const fetchUserBalance = async () => {
     console.error('Failed to fetch user balance:', error)
     currentBalance.value = null
   }
+}
+
+// プロフィールの承認状態を取得
+const fetchProfileApproval = async () => {
+  const response = await apiClient.get<{ profile_approved: boolean }>('/profile')
+  profileApproved.value = response.success ? (response.data?.profile_approved ?? null) : null
 }
 
 // Submit request
@@ -181,6 +198,11 @@ const submitRequest = async () => {
     return
   }
 
+  if (isDepositBlockedByApproval.value) {
+    useNotification().showError('プロフィールが未承認のため、入金リクエストを送信できません')
+    return
+  }
+
   loading.value = true
 
   try {
@@ -190,12 +212,17 @@ const submitRequest = async () => {
       amount: form.value.transaction_type === 'withdrawal' ? -Math.abs(form.value.amount) : form.value.amount
     }
 
-    const response = await apiClient.post<{ data: any; message: string }>('/transactions/request', submitData)
+    const response = await apiClient.post('/transactions/request', submitData)
+
+    if (!response.success) {
+      useNotification().showError(response.error || 'リクエストの送信に失敗しました')
+      return
+    }
 
     const transactionType = form.value.transaction_type === 'deposit' ? '入金' : '出金'
-    useNotification().showSuccess(response.data!.message || `${transactionType}リクエストを送信しました`)
+    useNotification().showSuccess(response.message || `${transactionType}リクエストを送信しました`)
 
-    emit('request-created', response.data!.data)
+    emit('request-created', response.data)
     emit('update:modelValue', false)
 
     // Reset form
@@ -227,5 +254,6 @@ onMounted(() => {
   if (form.value.transaction_type === 'withdrawal') {
     fetchUserBalance()
   }
+  fetchProfileApproval()
 })
 </script>

@@ -15,13 +15,16 @@
           </button>
           <button
             class="flex items-center justify-center px-4 py-2 sm:px-6 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:bg-secondary-400 disabled:cursor-not-allowed transition-all duration-200 font-medium whitespace-nowrap"
-            :disabled="hasPendingRequest" @click="showRequestDialog = true">
+            :disabled="hasPendingRequest || isProfileUnapproved" @click="showRequestDialog = true">
             <Icon name="mdi:plus" class="text-lg sm:mr-2" />
             <span class="hidden sm:inline">新しいリクエスト</span>
             <span class="sm:hidden">新規</span>
           </button>
         </div>
       </div>
+      <p v-if="isProfileUnapproved" class="text-xs text-orange-600 mt-2 text-right">
+        プロフィールが未承認のため、新しいリクエストは送信できません
+      </p>
     </div>
 
     <!-- Status Cards -->
@@ -227,6 +230,7 @@ const limit = ref(20)
 const totalCount = ref(0)
 const hasMore = ref(false)
 const showRequestDialog = ref(false)
+const profileApproved = ref<boolean | null>(null)
 
 // Status options
 const statusOptions = [
@@ -260,6 +264,10 @@ const hasPendingRequest = computed(() => {
   return pendingCount.value > 0
 })
 
+const isProfileUnapproved = computed(() => {
+  return profileApproved.value === false
+})
+
 // Methods
 const loadRequests = async () => {
   loading.value = true
@@ -283,6 +291,11 @@ const loadRequests = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const loadProfileApproval = async () => {
+  const response = await apiClient.get<{ profile_approved: boolean }>('/profile')
+  profileApproved.value = response.success ? (response.data?.profile_approved ?? null) : null
 }
 
 const filterRequests = () => {
@@ -340,5 +353,6 @@ const getEmptyMessage = () => {
 
 onMounted(() => {
   loadRequests()
+  loadProfileApproval()
 })
 </script>

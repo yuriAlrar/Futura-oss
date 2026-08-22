@@ -13,6 +13,7 @@ interface ApiResponse<T = any> {
   data?: T
   message?: string
   error?: string
+  statusCode?: number
 }
 
 export const useApiClient = (options: ApiClientOptions = {}) => {
@@ -93,18 +94,23 @@ export const useApiClient = (options: ApiClientOptions = {}) => {
       if (!response.ok) {
         const errorText = await response.text()
         let errorData: any = {}
-        
+
         try {
           errorData = JSON.parse(errorText)
         } catch {
           errorData = { message: errorText }
         }
 
-        throw new Error(errorData.statusMessage || errorData.message || `HTTP ${response.status}: ${response.statusText}`)
+        // ステータスコードを保持したまま返す（呼び出し側で403等を判定できるようにする。
+        // 従来はここでthrowしてcatch節でstatusCodeが失われていた）
+        return {
+          success: false,
+          error: errorData.statusMessage || errorData.message || `HTTP ${response.status}: ${response.statusText}`,
+          statusCode: response.status
+        }
       }
 
       const data = await response.json()
-      console.log('data', data)
       return data as ApiResponse<T>
     } catch (error) {
       console.error('API Request Error:', error)

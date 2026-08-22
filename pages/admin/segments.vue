@@ -23,8 +23,13 @@
       </v-card-text>
     </v-card>
 
+    <!-- Permission Error -->
+    <v-alert v-if="loadError" type="error" variant="tonal" class="mb-6">
+      {{ loadError }}
+    </v-alert>
+
     <!-- Segments Table -->
-    <v-card>
+    <v-card v-if="!loadError">
       <v-card-title class="px-6 py-4 border-b">
         <h3 class="text-lg font-semibold text-gray-900">セグメント一覧</h3>
       </v-card-title>
@@ -94,6 +99,7 @@ const apiClient = useApiClient()
 // State
 const segments = ref<SegmentWithMemberCount[]>([])
 const loading = ref(false)
+const loadError = ref<string | null>(null)
 const searchQuery = ref('')
 const showManagementDialog = ref(false)
 const showMembersDialog = ref(false)
@@ -122,12 +128,25 @@ const filteredSegments = computed(() => {
 // Methods
 const loadSegments = async () => {
   loading.value = true
+  loadError.value = null
   try {
     const response = await apiClient.get<{ items: SegmentWithMemberCount[] }>('/admin/segments')
+
+    if (!response.success) {
+      if (response.statusCode === 403) {
+        loadError.value = 'セグメント情報を閲覧する権限がありません。管理者にお問い合わせください。'
+      } else {
+        loadError.value = response.error || 'セグメント一覧の取得に失敗しました'
+      }
+      showError(loadError.value)
+      return
+    }
+
     segments.value = response.data?.items || []
   } catch (error) {
     logger.error('セグメント一覧の読み込みに失敗しました:', error)
-    showError('セグメント一覧の取得に失敗しました')
+    loadError.value = 'セグメント一覧の取得に失敗しました'
+    showError(loadError.value)
   } finally {
     loading.value = false
   }
@@ -154,7 +173,17 @@ const deleteSegment = async (segment: SegmentWithMemberCount) => {
   }
 
   try {
-    await apiClient.delete(`/admin/segments/${segment.segment_id}`)
+    const response = await apiClient.delete(`/admin/segments/${segment.segment_id}`)
+
+    if (!response.success) {
+      if (response.statusCode === 403) {
+        showError('セグメントを削除する権限がありません')
+      } else {
+        showError(response.error || 'セグメントの削除に失敗しました')
+      }
+      return
+    }
+
     showSuccess(`セグメント「${segment.name}」を削除しました`)
     await loadSegments()
   } catch (error) {

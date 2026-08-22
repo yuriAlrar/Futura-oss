@@ -12,10 +12,22 @@ export default defineEventHandler(async (event) => {
     // （招待コードは不要。認証済みであること自体が本人確認の代替になる）
     const currentUser = await requirePermission(event, 'account:create-sub')
 
-    const body = await readBody<SubAccountCreateForm>(event)
-    const { email, name, address, phone_number } = body
+    const dynamodb = getDynamoDBService()
+    const usersTableName = dynamodb.getTableName('users')
 
-    if (!email || !name || !address || !phone_number) {
+    // サブアカウント自身からさらにサブアカウントを作ることは禁止する（parent_user_idの有無で判定）
+    const selfUser = await dynamodb.get(usersTableName, { user_id: currentUser.user_id }) as User | null
+    if (selfUser?.parent_user_id) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: 'Sub-accounts cannot create further sub-accounts'
+      })
+    }
+
+    const body = await readBody<SubAccountCreateForm>(event)
+    const { email, name } = body
+
+    if (!email || !name) {
       throw createError({
         statusCode: 400,
         statusMessage: 'All fields are required'
@@ -79,16 +91,14 @@ export default defineEventHandler(async (event) => {
     // Generate dummy BTC address（モック運用のため、ダミーキーで十分）
     const btcAddress = `1${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`
 
-    const dynamodb = getDynamoDBService()
-    const tableName = dynamodb.getTableName('users')
     const now = new Date().toISOString()
 
     const subAccount: User = {
       user_id: userId,
       email,
       name,
-      address,
-      phone_number,
+      address: '', // サブアカウント作成時には収集しない。プロフィール画面から後日入力する
+      phone_number: '',
       status: 'active',
       profile_approved: false, // 管理者による承認待ち
       btc_address: btcAddress,
@@ -97,7 +107,7 @@ export default defineEventHandler(async (event) => {
       parent_user_id: currentUser.user_id
     }
 
-    await dynamodb.put(tableName, subAccount as unknown as Record<string, unknown>)
+    await dynamodb.put(usersTableName, subAccount as unknown as Record<string, unknown>)
 
     const result: SubAccountCreateResult = {
       user: subAccount,

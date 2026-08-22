@@ -1,4 +1,4 @@
-import type { Transaction } from '~/types'
+import type { Transaction, User } from '~/types'
 import { TRANSACTION_STATUS } from '~/types'
 import { getDynamoDBService } from '~/server/utils/dynamodb'
 import { createError } from 'h3'
@@ -242,6 +242,24 @@ export async function validateWithdrawalBalance(
     throw createError({
       statusCode: 400,
       statusMessage: 'Insufficient balance for withdrawal'
+    })
+  }
+}
+
+/**
+ * 入金リクエスト時のプロフィール承認チェック
+ * プロフィールが未承認のユーザーは入金リクエストを送信できない
+ */
+export async function validateDepositApproval(userId: string): Promise<void> {
+  const dynamodb = getDynamoDBService()
+  const usersTableName = dynamodb.getTableName('users')
+
+  const user = await dynamodb.get(usersTableName, { user_id: userId }) as User | null
+
+  if (!user || !user.profile_approved) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: 'Profile approval is required before requesting a deposit'
     })
   }
 }

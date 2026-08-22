@@ -3,7 +3,7 @@ import { useLogger } from '~/composables/useLogger'
 import type { TransactionRequestForm, EnhancedTransaction } from '~/types'
 import { TRANSACTION_STATUS } from '~/types'
 import { generateTransactionId } from '~/server/utils/uuid'
-import { validateTransactionRequest, validateWithdrawalBalance, getTotalBalance } from '~/server/utils/transaction-helpers'
+import { validateTransactionRequest, validateWithdrawalBalance, validateDepositApproval, getTotalBalance } from '~/server/utils/transaction-helpers'
 
 export default defineEventHandler(async (event) => {
   const logger = useLogger({ prefix: '[TransactionRequest]' })
@@ -17,7 +17,12 @@ export default defineEventHandler(async (event) => {
     
     // 共通バリデーション関数を使用
     validateTransactionRequest(body)
-    
+
+    // 入金の場合はプロフィール承認済みかチェック（未承認ユーザーは入金リクエスト不可）
+    if (body.transaction_type === 'deposit') {
+      await validateDepositApproval(currentUser.user_id)
+    }
+
     // 出金の場合は残高チェック
     if (body.transaction_type === 'withdrawal') {
       await validateWithdrawalBalance(currentUser.user_id, body.amount, getTotalBalance)

@@ -30,46 +30,14 @@
           />
           
           <!-- New Password -->
-          <v-text-field
+          <CommonPasswordField
             v-model="credentials.newPassword"
             label="新しいパスワード"
-            :type="showNewPassword ? 'text' : 'password'"
-            variant="outlined"
             :rules="newPasswordRules"
+            confirm
+            confirm-label="新しいパスワード（確認）"
             class="mb-4"
-            required
-          >
-            <template #append-inner>
-              <v-btn
-                variant="text"
-                size="small"
-                @click="showNewPassword = !showNewPassword"
-              >
-                <Icon :name="showNewPassword ? 'mdi:eye-off' : 'mdi:eye'" />
-              </v-btn>
-            </template>
-          </v-text-field>
-          
-          <!-- Confirm Password -->
-          <v-text-field
-            v-model="credentials.confirmPassword"
-            label="新しいパスワード（確認）"
-            :type="showConfirmPassword ? 'text' : 'password'"
-            variant="outlined"
-            :rules="confirmPasswordRules"
-            class="mb-4"
-            required
-          >
-            <template #append-inner>
-              <v-btn
-                variant="text"
-                size="small"
-                @click="showConfirmPassword = !showConfirmPassword"
-              >
-                <Icon :name="showConfirmPassword ? 'mdi:eye-off' : 'mdi:eye'" />
-              </v-btn>
-            </template>
-          </v-text-field>
+          />
           
           <!-- Password Requirements -->
           <v-card
@@ -148,13 +116,9 @@ const isFormValid = ref(false)
 const loading = ref(false)
 const errorMessage = ref('')
 
-const showNewPassword = ref(false)
-const showConfirmPassword = ref(false)
-
 const credentials = reactive({
   temporaryPassword: computed(() => props.temporaryPassword),
-  newPassword: '',
-  confirmPassword: ''
+  newPassword: ''
 })
 
 // Validation rules
@@ -164,11 +128,6 @@ const newPasswordRules = [
   (v: string) => /[A-Z]/.test(v) || '大文字を含む必要があります',
   (v: string) => /[a-z]/.test(v) || '小文字を含む必要があります',
   (v: string) => /[0-9]/.test(v) || '数字を含む必要があります'
-]
-
-const confirmPasswordRules = [
-  (v: string) => !!v || 'パスワードの確認は必須です',
-  (v: string) => v === credentials.newPassword || 'パスワードが一致しません'
 ]
 
 // Methods
@@ -188,13 +147,16 @@ const handleSubmit = async () => {
 
     const response = await apiClient.post('/auth/change-initial-password', requestData)
 
-    if (response.success) {
-      emit('success', response.data.authenticationResult)
-      isOpen.value = false
+    if (!response.success) {
+      errorMessage.value = response.error || 'パスワード変更に失敗しました'
+      return
     }
-  } catch (error: any) {
+
+    emit('success', response.data.authenticationResult)
+    isOpen.value = false
+  } catch (error: unknown) {
     logger.error('パスワード変更エラー:', error)
-    errorMessage.value = error?.data?.message || 'パスワード変更に失敗しました'
+    errorMessage.value = 'パスワード変更に失敗しました'
   } finally {
     loading.value = false
   }
@@ -204,10 +166,7 @@ const handleSubmit = async () => {
 watch(isOpen, (newValue) => {
   if (newValue) {
     credentials.newPassword = ''
-    credentials.confirmPassword = ''
     errorMessage.value = ''
-    showNewPassword.value = false
-    showConfirmPassword.value = false
   }
 })
 </script>

@@ -10,21 +10,11 @@
         <v-card-text class="p-6">
           <v-form ref="formRef" v-model="isFormValid" @submit.prevent="changePassword">
             <div class="space-y-4">
-              <v-text-field v-model="form.currentPassword" label="現在のパスワード *"
-                :type="showCurrentPassword ? 'text' : 'password'" variant="outlined" :rules="currentPasswordRules"
-                :append-inner-icon="showCurrentPassword ? 'mdi-eye' : 'mdi-eye-off'" autocomplete="current-password"
-                required @click:append-inner="showCurrentPassword = !showCurrentPassword" />
+              <CommonPasswordField v-model="form.currentPassword" label="現在のパスワード *" :rules="currentPasswordRules"
+                autocomplete="current-password" />
 
-              <v-text-field v-model="form.newPassword" label="新しいパスワード *" :type="showNewPassword ? 'text' : 'password'"
-                variant="outlined" :rules="newPasswordRules"
-                :append-inner-icon="showNewPassword ? 'mdi-eye' : 'mdi-eye-off'" autocomplete="new-password"
-                hint="8文字以上、小文字・数字を含む" persistent-hint required
-                @click:append-inner="showNewPassword = !showNewPassword" />
-
-              <v-text-field v-model="form.confirmPassword" label="新しいパスワード（確認） *"
-                :type="showConfirmPassword ? 'text' : 'password'" variant="outlined" :rules="confirmPasswordRules"
-                :append-inner-icon="showConfirmPassword ? 'mdi-eye' : 'mdi-eye-off'" autocomplete="new-password"
-                required @click:append-inner="showConfirmPassword = !showConfirmPassword" />
+              <CommonPasswordField v-model="form.newPassword" label="新しいパスワード *" :rules="newPasswordRules" confirm
+                confirm-label="新しいパスワード（確認） *" autocomplete="new-password" hint="8文字以上、小文字・数字を含む" />
             </div>
 
             <!-- Password Strength Indicator -->
@@ -112,15 +102,11 @@ const { showSuccess, showError } = useNotification()
 // State
 const loading = ref(false)
 const isFormValid = ref(false)
-const showCurrentPassword = ref(false)
-const showNewPassword = ref(false)
-const showConfirmPassword = ref(false)
 const formRef = ref()
 
 const form = reactive({
   currentPassword: '',
-  newPassword: '',
-  confirmPassword: ''
+  newPassword: ''
 })
 
 // Validation rules
@@ -134,11 +120,6 @@ const newPasswordRules = [
   (v: string) => /(?=.*[a-z])/.test(v) || 'パスワードに小文字を含めてください',
   (v: string) => /(?=.*\d)/.test(v) || 'パスワードに数字を含めてください',
   (v: string) => v !== form.currentPassword || '新しいパスワードは現在のパスワードと異なる必要があります'
-]
-
-const confirmPasswordRules = [
-  (v: string) => !!v || 'パスワード確認は必須です',
-  (v: string) => v === form.newPassword || 'パスワードが一致しません'
 ]
 
 // Computed - Password Strength
@@ -217,7 +198,6 @@ const changePassword = async () => {
     // Reset form
     form.currentPassword = ''
     form.newPassword = ''
-    form.confirmPassword = ''
     formRef.value?.resetValidation()
 
     // Redirect to profile

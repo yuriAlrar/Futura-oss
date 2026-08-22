@@ -253,7 +253,7 @@ export async function createBatchTransactions(
         timestamp: now,
         created_by: createdBy,
         reason: '資産運用',
-        memo: `asset_manage_id: ${batchId}${memo ? ` | ${memo}` : ''}`
+        memo: `AMI: ${batchId}${memo ? ` | ${memo}` : ''}`
       }
 
       transactions.push(transaction)

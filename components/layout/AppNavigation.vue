@@ -46,23 +46,32 @@
         <v-list-subheader class="text-xs font-semibold text-gray-500 uppercase tracking-wider px-3">
           管理者機能
         </v-list-subheader>
-        
-        <v-list-item
-          v-for="item in adminNavItems"
-          :key="item.title"
-          :to="item.to"
-          :value="item.value"
-          color="primary"
-          rounded="lg"
-          class="mb-1"
-        >
-          <template #prepend>
-            <Icon :name="item.icon" class="text-xl" />
-          </template>
-          <v-list-item-title class="text-sm font-medium">
-            {{ item.title }}
-          </v-list-item-title>
-        </v-list-item>
+
+        <template v-for="section in adminNavSections" :key="section.title || 'admin-top'">
+          <v-list-subheader
+            v-if="section.title"
+            class="text-xs font-semibold text-gray-400 tracking-wider px-3 mt-2"
+          >
+            {{ section.title }}
+          </v-list-subheader>
+
+          <v-list-item
+            v-for="item in section.items"
+            :key="item.title"
+            :to="item.to"
+            :value="item.value"
+            color="primary"
+            rounded="lg"
+            class="mb-1"
+          >
+            <template #prepend>
+              <Icon :name="item.icon" class="text-xl" />
+            </template>
+            <v-list-item-title class="text-sm font-medium">
+              {{ item.title }}
+            </v-list-item-title>
+          </v-list-item>
+        </template>
       </template>
     </v-list>
 
@@ -174,67 +183,92 @@ const userNavItems = [
   }
 ]
 
-const adminNavItems = [
+const adminNavSections = [
   {
-    title: '管理者ダッシュボード',
-    icon: 'mdi:view-dashboard-variant',
-    to: '/admin',
-    value: 'admin-dashboard'
+    title: null,
+    items: [
+      {
+        title: '管理者ダッシュボード',
+        icon: 'mdi:view-dashboard-variant',
+        to: '/admin',
+        value: 'admin-dashboard'
+      }
+    ]
   },
   {
-    title: 'ユーザー管理',
-    icon: 'mdi:account-group',
-    to: '/admin/users',
-    value: 'admin-users'
-  },
-  {
-    title: 'グループ管理',
-    icon: 'mdi:shield-account',
-    to: '/admin/groups',
-    value: 'admin-groups'
-  },
-  {
-    title: 'セグメント管理',
-    icon: 'mdi:tag-multiple',
-    to: '/admin/segments',
-    value: 'admin-segments'
-  },
-  {
-    title: '招待コード管理',
-    icon: 'mdi:account-plus',
-    to: '/admin/invites',
-    value: 'admin-invites'
+    title: 'ユーザー管理関係',
+    items: [
+      {
+        title: 'ユーザー管理',
+        icon: 'mdi:account-group',
+        to: '/admin/users',
+        value: 'admin-users'
+      },
+      {
+        title: 'グループ管理',
+        icon: 'mdi:shield-account',
+        to: '/admin/groups',
+        value: 'admin-groups'
+      },
+      {
+        title: 'セグメント管理',
+        icon: 'mdi:tag-multiple',
+        to: '/admin/segments',
+        value: 'admin-segments'
+      },
+      {
+        title: '招待コード管理',
+        icon: 'mdi:account-plus',
+        to: '/admin/invites',
+        value: 'admin-invites'
+      },
+      {
+        title: 'プロフィール承認',
+        icon: 'mdi:check-circle',
+        to: '/admin/approvals',
+        value: 'admin-approvals'
+      }
+    ]
   },
   {
     title: '入出金管理',
-    icon: 'mdi:bank-transfer',
-    to: '/admin/transactions',
-    value: 'admin-transactions'
+    items: [
+      {
+        title: '入出金管理',
+        icon: 'mdi:bank-transfer',
+        to: '/admin/transactions',
+        value: 'admin-transactions'
+      },
+      {
+        title: '入出金リクエスト承認',
+        icon: 'mdi:cash-register',
+        to: '/admin/transaction-requests',
+        value: 'admin-transaction-requests'
+      }
+    ]
   },
   {
-    title: '入出金リクエスト承認',
-    icon: 'mdi:cash-register',
-    to: '/admin/transaction-requests',
-    value: 'admin-transaction-requests'
+    title: '資産運用操作',
+    items: [
+      {
+        title: '一括資産調整',
+        icon: 'mdi:cash-multiple',
+        to: '/admin/batch-operations',
+        value: 'admin-batch-operations'
+      }
+    ]
   },
   {
-    title: 'プロフィール承認',
-    icon: 'mdi:check-circle',
-    to: '/admin/approvals',
-    value: 'admin-approvals'
-  },
-  {
-    title: '一括資産調整',
-    icon: 'mdi:cash-multiple',
-    to: '/admin/batch-operations',
-    value: 'admin-batch-operations'
-  },
-  {
-    title: '相場価格設定',
-    icon: 'mdi:chart-line',
-    to: '/admin/rates',
-    value: 'admin-rates'
-  },
+    title: 'マスタ管理',
+    items: [
+      {
+        title: '相場価格設定',
+        icon: 'mdi:chart-line',
+        to: '/admin/rates',
+        value: 'admin-rates'
+      }
+    ]
+  }
 ]
 
 const userInitials = computed(() => {

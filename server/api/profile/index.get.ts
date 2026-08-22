@@ -35,7 +35,8 @@ export default defineEventHandler(async (event) => {
         profile_approved: userProfile.profile_approved,
         status: userProfile.status,
         created_at: userProfile.created_at,
-        updated_at: userProfile.updated_at
+        updated_at: userProfile.updated_at,
+        parent_user_id: userProfile.parent_user_id
       }
     }
   } catch (error: unknown) {

@@ -35,28 +35,21 @@
               </v-btn>
             </div>
 
-            <div v-if="loading" class="text-center py-6">
-              <v-progress-circular indeterminate color="primary" />
-              <p class="text-gray-600 mt-2">読み込み中...</p>
-            </div>
-
-            <div v-else-if="members.length === 0" class="text-center py-6">
-              <Icon name="mdi:account-group-outline" class="text-4xl text-gray-400 mb-2" />
-              <p class="text-gray-600">このセグメントにはメンバーがいません</p>
-            </div>
-
-            <div v-else class="space-y-2">
-              <v-card v-for="member in members" :key="member.user_id" variant="outlined" class="pa-4">
-                <div class="flex items-center justify-between">
-                  <div>
-                    <p class="font-medium text-gray-900">{{ member.name }}</p>
-                    <p class="text-sm text-gray-600">{{ member.email }}</p>
-                  </div>
-                  <v-btn size="small" variant="text" color="error" icon="mdi-account-minus"
-                    :loading="removingUserId === member.user_id" @click="removeUser(member)" />
-                </div>
-              </v-card>
-            </div>
+            <v-data-table
+              :headers="memberHeaders"
+              :items="members"
+              :loading="loading"
+              item-value="user_id"
+              :items-per-page="10"
+              class="elevation-0 border rounded-lg"
+              no-data-text="このセグメントにはメンバーがいません"
+              loading-text="読み込み中..."
+            >
+              <template #[`item.actions`]="{ item }">
+                <v-btn size="small" variant="text" color="error" icon="mdi-account-minus"
+                  :loading="removingUserId === item.user_id" @click="removeUser(item)" />
+              </template>
+            </v-data-table>
           </div>
         </div>
       </v-card-text>
@@ -95,6 +88,12 @@ const selectedUserId = ref<string>('')
 const members = ref<User[]>([])
 const allUsers = ref<User[]>([])
 
+const memberHeaders = [
+  { title: '氏名', key: 'name', sortable: true },
+  { title: 'メールアドレス', key: 'email', sortable: true },
+  { title: 'アクション', key: 'actions', sortable: false, width: 100 }
+]
+
 const availableUserOptions = computed(() => {
   const memberIds = new Set(members.value.map(m => m.user_id))
   return allUsers.value
@@ -121,6 +120,12 @@ const loadMembers = async () => {
   loading.value = true
   try {
     const response = await apiClient.get<Segment & { members: User[] }>(`/admin/segments/${props.segment.segment_id}`)
+
+    if (!response.success) {
+      showError(response.statusCode === 403 ? 'セグメント情報を閲覧する権限がありません' : (response.error || 'セグメントメンバーの取得に失敗しました'))
+      return
+    }
+
     members.value = response.data?.members || []
   } catch (error) {
     logger.error('セグメントメンバーの読み込みに失敗しました:', error)
@@ -135,7 +140,12 @@ const addUser = async () => {
 
   addingUser.value = true
   try {
-    await apiClient.post(`/admin/segments/${props.segment.segment_id}/users`, { user_id: selectedUserId.value })
+    const response = await apiClient.post(`/admin/segments/${props.segment.segment_id}/users`, { user_id: selectedUserId.value })
+
+    if (!response.success) {
+      showError(response.statusCode === 403 ? 'セグメントへユーザーを追加する権限がありません' : (response.error || 'ユーザーの追加に失敗しました'))
+      return
+    }
 
     const user = allUsers.value.find(u => u.user_id === selectedUserId.value)
     showSuccess(`「${user?.name}」をセグメント「${props.segment.name}」に追加しました`)
@@ -145,7 +155,7 @@ const addUser = async () => {
     emit('updated')
   } catch (error: any) {
     logger.error('セグメントへのユーザー追加に失敗しました:', error)
-    showError(error?.data?.statusMessage || 'ユーザーの追加に失敗しました')
+    showError('ユーザーの追加に失敗しました')
   } finally {
     addingUser.value = false
   }
@@ -160,13 +170,19 @@ const removeUser = async (member: User) => {
 
   removingUserId.value = member.user_id
   try {
-    await apiClient.delete(`/admin/segments/${props.segment.segment_id}/users/${member.user_id}`)
+    const response = await apiClient.delete(`/admin/segments/${props.segment.segment_id}/users/${member.user_id}`)
+
+    if (!response.success) {
+      showError(response.statusCode === 403 ? 'セグメントからユーザーを削除する権限がありません' : (response.error || 'ユーザーの削除に失敗しました'))
+      return
+    }
+
     showSuccess(`「${member.name}」をセグメント「${props.segment.name}」から削除しました`)
     await loadMembers()
     emit('updated')
   } catch (error: any) {
     logger.error('セグメントからのユーザー削除に失敗しました:', error)
-    showError(error?.data?.statusMessage || 'ユーザーの削除に失敗しました')
+    showError('ユーザーの削除に失敗しました')
   } finally {
     removingUserId.value = null
   }

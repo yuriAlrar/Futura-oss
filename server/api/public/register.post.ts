@@ -19,9 +19,9 @@ export default defineEventHandler(async (event) => {
     }
 
     const body = await readBody<PublicRegisterForm>(event)
-    const { invite_code, email, name, address, phone_number, password } = body
+    const { invite_code, email, name, phone_number, password } = body
 
-    if (!invite_code || !email || !name || !address || !phone_number || !password) {
+    if (!invite_code || !email || !name || !phone_number || !password) {
       throw createError({ statusCode: 400, statusMessage: 'All fields are required' })
     }
 
@@ -112,7 +112,7 @@ export default defineEventHandler(async (event) => {
         user_id: userId,
         email,
         name,
-        address,
+        address: '', // 登録時点では収集しない。プロフィール画面から後日入力する
         phone_number,
         status: 'active',
         profile_approved: false,

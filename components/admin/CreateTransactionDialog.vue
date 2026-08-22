@@ -207,21 +207,19 @@ const createTransaction = async () => {
       amount: form.transaction_type === 'withdrawal' ? -Math.abs(form.amount) : form.amount
     }
 
-    await apiClient.post('/admin/transactions', submitData)
+    const response = await apiClient.post('/admin/transactions', submitData)
+
+    if (!response.success) {
+      showError(response.error?.includes('Insufficient balance') ? '残高が不足しています' : (response.error || '取引の追加に失敗しました'))
+      return
+    }
 
     showSuccess('取引を追加しました')
     resetForm()
     emit('created')
   } catch (error: unknown) {
     logger.error('取引の作成に失敗しました:', error)
-
-    // Type guard for fetch error
-    const fetchError = error as { data?: { statusMessage?: string } }
-    if (fetchError.data?.statusMessage?.includes('Insufficient balance')) {
-      showError('残高が不足しています')
-    } else {
-      showError('取引の追加に失敗しました')
-    }
+    showError('取引の追加に失敗しました')
   } finally {
     loading.value = false
   }
@@ -236,10 +234,9 @@ const cancel = () => {
 const loadLatestRate = async () => {
   try {
     rateError.value = false
-    const apiClient = useApiClient()
-    const response = await apiClient.get<{ success: boolean; data: MarketRate }>('/market-rates/latest')
+    const response = await apiClient.get<MarketRate>('/market-rates/latest')
     if (response.success && response.data) {
-      latestRate.value = response.data.data
+      latestRate.value = response.data
     } else {
       throw new Error('No market rate data available')
     }

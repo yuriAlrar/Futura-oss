@@ -73,19 +73,30 @@ const submit = async () => {
 
   loading.value = true
   try {
-    if (props.segment) {
-      const payload: SegmentUpdateForm = { name: form.name, description: form.description }
-      await apiClient.put(`/admin/segments/${props.segment.segment_id}`, payload)
+    const isUpdate = !!props.segment
+    const response = isUpdate
+      ? await apiClient.put(`/admin/segments/${props.segment!.segment_id}`, { name: form.name, description: form.description } as SegmentUpdateForm)
+      : await apiClient.post('/admin/segments', form)
+
+    if (!response.success) {
+      if (response.statusCode === 403) {
+        showError(isUpdate ? 'セグメントを編集する権限がありません' : 'セグメントを作成する権限がありません')
+      } else {
+        showError(response.error || 'セグメントの保存に失敗しました')
+      }
+      return
+    }
+
+    if (isUpdate) {
       showSuccess('セグメントを更新しました')
       emit('updated')
     } else {
-      await apiClient.post('/admin/segments', form)
       showSuccess('セグメントを作成しました')
       emit('created')
     }
   } catch (error: any) {
     logger.error('セグメント保存エラー:', error)
-    showError(error?.data?.statusMessage || 'セグメントの保存に失敗しました')
+    showError('セグメントの保存に失敗しました')
   } finally {
     loading.value = false
   }

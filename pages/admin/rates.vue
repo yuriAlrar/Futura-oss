@@ -3,36 +3,16 @@
     <div class="mb-6 flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-900 mb-2">相場価格設定</h1>
-        <p class="text-gray-600">現在は円建て運用のため、レートは1固定で編集操作は無効化されています</p>
+        <p class="text-gray-600">内部レート（資産評価に使用する円換算レート）の設定・変更を行います</p>
       </div>
       <div class="flex gap-3">
-        <v-tooltip text="現在レート操作は無効化されています（1BTC=1JPY固定運用中）">
-          <template #activator="{ props: tooltipProps }">
-            <span v-bind="tooltipProps">
-              <v-btn
-                color="secondary"
-                variant="outlined"
-                prepend-icon="mdi-upload"
-                disabled
-              >
-                CSV一括アップロード
-              </v-btn>
-            </span>
-          </template>
-        </v-tooltip>
-        <v-tooltip text="現在レート操作は無効化されています（1BTC=1JPY固定運用中）">
-          <template #activator="{ props: tooltipProps }">
-            <span v-bind="tooltipProps">
-              <v-btn
-                color="primary"
-                prepend-icon="mdi-plus"
-                disabled
-              >
-                新しい相場価格を設定
-              </v-btn>
-            </span>
-          </template>
-        </v-tooltip>
+        <v-btn
+          color="primary"
+          prepend-icon="mdi-plus"
+          @click="showCreateDialog = true"
+        >
+          新しい相場価格を設定
+        </v-btn>
       </div>
     </div>
 
@@ -140,21 +120,27 @@
           <span v-else class="text-gray-400">-</span>
         </template>
 
-        <template #[`item.actions`]="{ item: _item }">
-          <v-tooltip text="現在レート操作は無効化されています（1BTC=1JPY固定運用中）">
-            <template #activator="{ props: tooltipProps }">
-              <span v-bind="tooltipProps">
-                <v-btn size="small" variant="text" color="primary" disabled>
-                  <Icon name="mdi:pencil" />
-                  編集
-                </v-btn>
-              </span>
-            </template>
-          </v-tooltip>
+        <template #[`item.actions`]="{ item }">
+          <v-btn size="small" variant="text" color="primary" @click="openEditDialog(item)">
+            <Icon name="mdi:pencil" />
+            編集
+          </v-btn>
         </template>
       </v-data-table>
     </v-card>
 
+    <!-- Create Market Rate Dialog -->
+    <AdminCreateMarketRateDialog
+      v-model="showCreateDialog"
+      @created="loadRates"
+    />
+
+    <!-- Edit Market Rate Dialog -->
+    <AdminEditMarketRateDialog
+      v-model="showEditDialog"
+      :market-rate="selectedRate"
+      @updated="loadRates"
+    />
   </div>
 </template>
 
@@ -179,11 +165,14 @@ const apiClient = useApiClient()
 const rates = ref<MarketRate[]>([])
 const latestRate = ref<MarketRate | null>(null)
 const loading = ref(false)
+const showCreateDialog = ref(false)
+const showEditDialog = ref(false)
+const selectedRate = ref<MarketRate | null>(null)
 
 // Table headers
 const headers = [
   { title: '設定日時', key: 'timestamp', sortable: true },
-  { title: '価格', key: 'btc_jpy_rate', sortable: true },
+  { title: '内部レート（円）', key: 'btc_jpy_rate', sortable: true },
   { title: '前回からの変動', key: 'change', sortable: false },
   { title: '作成日時', key: 'created_at', sortable: true },
   { title: 'アクション', key: 'actions', sortable: false, width: 120 }
@@ -232,17 +221,24 @@ const loadRates = async () => {
       apiClient.get<MarketRate>('/market-rates/latest')
     ])
 
-    console.log('ratesResponse', ratesResponse)
-    console.log('latestResponse', latestResponse)
+    if (!ratesResponse.success) {
+      showError(ratesResponse.error || '相場データの取得に失敗しました')
+      return
+    }
 
     rates.value = ratesResponse.data!.items
-    latestRate.value = latestResponse.data || null
+    latestRate.value = latestResponse.success ? (latestResponse.data || null) : null
   } catch (error) {
     logger.error('相場データの読み込みに失敗しました:', error)
     showError('相場データの取得に失敗しました')
   } finally {
     loading.value = false
   }
+}
+
+const openEditDialog = (rate: MarketRate) => {
+  selectedRate.value = rate
+  showEditDialog.value = true
 }
 
 // Utility functions
