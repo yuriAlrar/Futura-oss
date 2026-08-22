@@ -42,6 +42,12 @@
           </v-chip>
         </template>
 
+        <template #[`item.operation_status`]="{ item }">
+          <v-chip :color="item.operation_status === 'suspended' ? 'grey' : 'success'" size="small" variant="flat">
+            {{ item.operation_status === 'suspended' ? '運用停止中' : '運用中' }}
+          </v-chip>
+        </template>
+
         <template #[`item.created_at`]="{ item }">
           {{ formatDate(item.created_at) }}
         </template>
@@ -57,6 +63,18 @@
               @click="activateUser(item)" />
             <v-btn size="small" variant="text" color="info" icon="mdi-lock-reset"
               @click="openResetPasswordDialog(item)" />
+            <v-tooltip v-if="item.operation_status !== 'suspended'" text="運用停止（一括資産調整の対象から除外）">
+              <template #activator="{ props: tooltipProps }">
+                <v-btn v-bind="tooltipProps" size="small" variant="text" color="grey-darken-1" icon="mdi-cancel"
+                  @click="operationSuspendUser(item)" />
+              </template>
+            </v-tooltip>
+            <v-tooltip v-else text="運用再開">
+              <template #activator="{ props: tooltipProps }">
+                <v-btn v-bind="tooltipProps" size="small" variant="text" color="success" icon="mdi-restore"
+                  @click="operationActivateUser(item)" />
+              </template>
+            </v-tooltip>
             <v-btn v-if="item.status !== 'deleted'" size="small" variant="text" color="error" icon="mdi-delete"
               :disabled="item.user_id === user?.user_id" @click="deleteUser(item)" />
           </div>
@@ -129,8 +147,9 @@ const headers = [
   { title: 'メールアドレス', key: 'email', sortable: true },
   { title: 'ステータス', key: 'status', sortable: true },
   { title: 'プロフィール承認', key: 'profile_approved', sortable: true },
+  { title: '運用状態', key: 'operation_status', sortable: false },
   { title: '作成日', key: 'created_at', sortable: true },
-  { title: 'アクション', key: 'actions', sortable: false, width: 200 }
+  { title: 'アクション', key: 'actions', sortable: false, width: 240 }
 ]
 
 // 算出プロパティ（Computed）
@@ -200,6 +219,40 @@ const activateUser = async (user: User) => {
   } catch (error) {
     logger.error('ユーザーの有効化に失敗しました:', error)
     showError('ユーザーの有効化に失敗しました')
+  }
+}
+
+const operationSuspendUser = async (user: User) => {
+  if (!confirm(`${user.name}を運用停止しますか？（ログインは引き続き可能で、一括資産調整の対象からのみ除外されます）`)) {
+    return
+  }
+
+  try {
+    const response = await apiClient.post(`/admin/users/${user.user_id}/operation-suspend`)
+    if (response.success) {
+      showSuccess(`${user.name}を運用停止にしました`)
+      await loadUsers()
+    } else {
+      showError(response.error || '運用停止に失敗しました')
+    }
+  } catch (error) {
+    logger.error('運用停止に失敗しました:', error)
+    showError('運用停止に失敗しました')
+  }
+}
+
+const operationActivateUser = async (user: User) => {
+  try {
+    const response = await apiClient.post(`/admin/users/${user.user_id}/operation-activate`)
+    if (response.success) {
+      showSuccess(`${user.name}の運用を再開しました`)
+      await loadUsers()
+    } else {
+      showError(response.error || '運用再開に失敗しました')
+    }
+  } catch (error) {
+    logger.error('運用再開に失敗しました:', error)
+    showError('運用再開に失敗しました')
   }
 }
 

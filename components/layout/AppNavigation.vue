@@ -194,6 +194,18 @@ const adminNavItems = [
     value: 'admin-groups'
   },
   {
+    title: 'セグメント管理',
+    icon: 'mdi:tag-multiple',
+    to: '/admin/segments',
+    value: 'admin-segments'
+  },
+  {
+    title: '招待コード管理',
+    icon: 'mdi:account-plus',
+    to: '/admin/invites',
+    value: 'admin-invites'
+  },
+  {
     title: '入出金管理',
     icon: 'mdi:bank-transfer',
     to: '/admin/transactions',
@@ -212,8 +224,8 @@ const adminNavItems = [
     value: 'admin-approvals'
   },
   {
-    title: 'BTC一括調整',
-    icon: 'mdi:bitcoin',
+    title: '一括資産調整',
+    icon: 'mdi:cash-multiple',
     to: '/admin/batch-operations',
     value: 'admin-batch-operations'
   },

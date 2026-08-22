@@ -21,31 +21,22 @@
                 <span class="text-sm text-blue-700">残高を取得中...</span>
               </div>
               <p v-else class="text-lg font-semibold text-blue-900">
-                {{ selectedUserBalance }} BTC
+                ¥{{ formatNumber(selectedUserBalance || 0) }}
               </p>
             </div>
 
             <v-select v-model="form.transaction_type" :items="transactionTypeOptions" label="取引種別 *" variant="outlined"
               :rules="typeRules" required />
 
-            <!-- Currency and Amount Input -->
+            <!-- Amount Input -->
             <div class="space-y-2">
-              <div class="flex flex-col sm:flex-row gap-2">
-                <v-select v-model="selectedCurrency" :items="currencyOptions" label="入力通貨" variant="outlined"
-                  class="w-full sm:w-32 flex-shrink-0" />
-
-                <v-text-field v-if="selectedCurrency === 'JPY'" v-model.number="jpyAmount" label="金額（JPY） *"
-                  type="number" step="1" variant="outlined" :rules="jpyAmountRules" suffix="JPY"
-                  hint="最新の相場レートでBTCに自動換算されます" persistent-hint required class="flex-1" @input="convertJpyToBtc" />
-
-                <v-text-field v-else v-model.number="form.amount" label="金額（BTC） *" type="number" step="0.00000001"
-                  variant="outlined" :rules="amountRules" suffix="BTC" hint="直接BTCで金額を入力します" persistent-hint required
-                  class="flex-1" @input="convertBtcToJpy" />
-              </div>
+              <v-text-field v-model.number="jpyAmount" label="金額（円） *"
+                type="number" step="1" variant="outlined" :rules="amountRules" suffix="円"
+                persistent-hint required class="flex-1" @input="convertJpyToInternal" />
 
               <!-- Rate Loading/Error State -->
               <v-alert v-if="rateError" type="error" variant="tonal" density="compact" class="mt-2">
-                相場レートの取得に失敗しました。BTCで直接入力してください。
+                レートの取得に失敗しました。時間をおいて再度お試しください。
               </v-alert>
             </div>
 
@@ -61,7 +52,7 @@
         <v-alert
           v-if="form.transaction_type === 'withdrawal' && selectedUserBalance !== null && Math.abs(form.amount) > selectedUserBalance"
           type="error" variant="tonal" class="mt-4" density="compact">
-          残高不足です。現在の残高: {{ selectedUserBalance }} BTC
+          残高不足です。現在の残高: ¥{{ formatNumber(selectedUserBalance) }}
         </v-alert>
 
         <v-alert type="info" variant="tonal" class="mt-4" density="compact">
@@ -88,6 +79,7 @@
 <script setup lang="ts">
 import type { TransactionCreateForm, User, MarketRate } from '~/types'
 import { getTransactionTypeLabel } from '~/utils/transaction'
+import { formatNumber } from '~/utils/format'
 
 const apiClient = useApiClient()
 
@@ -113,7 +105,6 @@ const formRef = ref()
 const loading = ref(false)
 const selectedUserBalance = ref<number | null>(null)
 const loadingBalance = ref(false)
-const selectedCurrency = ref<'BTC' | 'JPY'>('BTC')
 const jpyAmount = ref<number>(0)
 const latestRate = ref<MarketRate | null>(null)
 const rateError = ref<boolean>(false)
@@ -137,11 +128,6 @@ const userOptions = computed(() =>
 const transactionTypeOptions = [
   { title: '入金', value: 'deposit' },
   { title: '出金', value: 'withdrawal' }
-]
-
-const currencyOptions = [
-  { title: 'BTC', value: 'BTC' },
-  // { title: 'JPY', value: 'JPY' }
 ]
 
 const depositReasonOptions = [
@@ -181,13 +167,7 @@ const typeRules = [
   (v: string) => !!v || '取引種別を選択してください'
 ]
 
-const amountRules = computed(() => [
-  (v: number) => !!v || '金額は必須です',
-  (v: number) => v > 0 || '金額は正の数値で入力してください',
-  (v: number) => v <= 1000 || '金額が大きすぎます（最大1000 BTC）'
-])
-
-const jpyAmountRules = [
+const amountRules = [
   (v: number) => !!v || '金額は必須です',
   (v: number) => v > 0 || '金額は正の数値で入力してください',
   (v: number) => v <= 20000000000 || '金額が大きすぎます（最大200億円）'
@@ -212,7 +192,7 @@ const createTransaction = async () => {
   }
 
   const selectedUser = props.users.find(u => u.user_id === form.user_id)
-  const confirmMessage = `${selectedUser?.name}に${getTransactionTypeLabel(form.transaction_type)}（${form.amount} BTC）を実行してもよろしいですか？`
+  const confirmMessage = `${selectedUser?.name}に${getTransactionTypeLabel(form.transaction_type)}（¥${formatNumber(form.amount)}）を実行してもよろしいですか？`
 
   if (!confirm(confirmMessage)) {
     return
@@ -270,22 +250,15 @@ const loadLatestRate = async () => {
   }
 }
 
-const convertJpyToBtc = () => {
+// 円入力値を内部保存値に変換（現在はレートが1固定のため実質等価だが、
+// 将来レート変動が再開された場合に備えてレート換算のロジックは維持する）
+const convertJpyToInternal = () => {
   if (!latestRate.value || !jpyAmount.value) {
     form.amount = 0
     return
   }
 
   form.amount = jpyAmount.value / latestRate.value.btc_jpy_rate
-}
-
-const convertBtcToJpy = () => {
-  if (!latestRate.value || !form.amount) {
-    jpyAmount.value = 0
-    return
-  }
-
-  jpyAmount.value = Math.round(form.amount * latestRate.value.btc_jpy_rate)
 }
 
 const resetForm = () => {
@@ -296,7 +269,6 @@ const resetForm = () => {
   form.reason = props.defaultReason || ''
   selectedUserBalance.value = null
   loadingBalance.value = false
-  selectedCurrency.value = 'BTC'
   jpyAmount.value = 0
   formRef.value?.resetValidation()
 }
@@ -343,17 +315,6 @@ watch(() => props.modelValue, async (newValue) => {
     }
   } else {
     resetForm()
-  }
-})
-
-// 通貨選択が変更された時の処理
-watch(selectedCurrency, (newCurrency) => {
-  if (newCurrency === 'JPY') {
-    // BTCからJPYモードに変更
-    convertBtcToJpy()
-  } else {
-    // JPYからBTCモードに変更
-    convertJpyToBtc()
   }
 })
 

@@ -42,7 +42,7 @@
                 </div>
                 <div class="flex items-center space-x-2">
                   <span class="text-sm font-mono font-semibold text-green-600">
-                    +{{ formatBTC(request.amount) }} BTC
+                    +¥{{ formatNumber(request.amount) }}
                   </span>
                   <span class="text-xs text-gray-500">{{ formatDate(request.requested_at || request.timestamp) }}</span>
                 </div>
@@ -211,7 +211,7 @@
 </template>
 
 <script setup lang="ts">
-import { formatBTC } from '~/utils/format'
+import { formatNumber } from '~/utils/format'
 import type { AdminDashboardData } from '~/types'
 
 // Page meta
@@ -268,7 +268,7 @@ const managementItems = [
   },
   {
     title: '相場価格設定',
-    description: 'BTC相場価格の更新と履歴管理',
+    description: '相場価格の履歴閲覧（現在は編集不可）',
     icon: 'mdi:chart-line',
     to: '/admin/rates',
     bgColor: 'bg-green-100',
@@ -291,12 +291,28 @@ const managementItems = [
     iconColor: 'text-red-600'
   },
   {
-    title: 'BTC一括調整',
-    description: '全ユーザーのBTC残高を一括で増減',
-    icon: 'mdi:bitcoin',
+    title: '一括資産調整',
+    description: '全ユーザーまたはセグメント単位で資産残高を一括で増減',
+    icon: 'mdi:cash-multiple',
     to: '/admin/batch-operations',
     bgColor: 'bg-yellow-100',
     iconColor: 'text-yellow-600'
+  },
+  {
+    title: 'セグメント管理',
+    description: '運用セグメントの作成と所属ユーザーの管理',
+    icon: 'mdi:tag-multiple',
+    to: '/admin/segments',
+    bgColor: 'bg-teal-100',
+    iconColor: 'text-teal-600'
+  },
+  {
+    title: '招待コード管理',
+    description: '新規登録用の招待リンクの発行・失効',
+    icon: 'mdi:account-plus',
+    to: '/admin/invites',
+    bgColor: 'bg-indigo-100',
+    iconColor: 'text-indigo-600'
   }
 ]
 

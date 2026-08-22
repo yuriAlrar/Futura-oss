@@ -47,8 +47,8 @@
             <h3 class="text-sm font-medium text-gray-600">今日の入金総額</h3>
             <Icon name="mdi:plus-circle" class="text-2xl text-green-500" />
           </div>
-          <p class="text-2xl font-bold text-green-600">{{ todayApprovedDepositTotal }} BTC</p>
-          <p class="text-xs text-gray-500 mt-1">全体: {{ todayDepositTotal }} BTC</p>
+          <p class="text-2xl font-bold text-green-600">¥{{ formatNumber(todayApprovedDepositTotal) }}</p>
+          <p class="text-xs text-gray-500 mt-1">全体: ¥{{ formatNumber(todayDepositTotal) }}</p>
         </v-card-text>
       </v-card>
 
@@ -58,8 +58,8 @@
             <h3 class="text-sm font-medium text-gray-600">今日の出金総額</h3>
             <Icon name="mdi:minus-circle" class="text-2xl text-red-500" />
           </div>
-          <p class="text-2xl font-bold text-red-600">{{ todayApprovedWithdrawalTotal }} BTC</p>
-          <p class="text-xs text-gray-500 mt-1">全体: {{ todayWithdrawalTotal }} BTC</p>
+          <p class="text-2xl font-bold text-red-600">¥{{ formatNumber(todayApprovedWithdrawalTotal) }}</p>
+          <p class="text-xs text-gray-500 mt-1">全体: ¥{{ formatNumber(todayWithdrawalTotal) }}</p>
         </v-card-text>
       </v-card>
 
@@ -99,7 +99,7 @@
 
         <template #[`item.amount`]="{ item }">
           <span class="font-mono font-semibold" :class="getTransactionTypeTextColor(item.transaction_type)">
-            {{ getTransactionTypeSign(item.transaction_type, item.amount) }}{{ Math.abs(item.amount) }} BTC
+            {{ getTransactionTypeSign(item.transaction_type, item.amount) }}¥{{ formatNumber(Math.abs(item.amount)) }}
           </span>
         </template>
 
@@ -147,6 +147,7 @@ import {
   isApprovedTransaction,
   reduceTransactionsBtc
 } from '~/utils/transaction'
+import { formatNumber } from '~/utils/format'
 
 definePageMeta({
   middleware: 'auth',

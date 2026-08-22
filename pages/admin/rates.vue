@@ -2,25 +2,37 @@
   <div class="p-6">
     <div class="mb-6 flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900 mb-2">BTC相場価格設定</h1>
-        <p class="text-gray-600">BTCの相場価格を設定して全ユーザーの資産価値を更新します</p>
+        <h1 class="text-2xl font-bold text-gray-900 mb-2">相場価格設定</h1>
+        <p class="text-gray-600">現在は円建て運用のため、レートは1固定で編集操作は無効化されています</p>
       </div>
       <div class="flex gap-3">
-        <v-btn
-          color="secondary"
-          variant="outlined"
-          prepend-icon="mdi-upload"
-          @click="showCSVUploadDialog = true"
-        >
-          CSV一括アップロード
-        </v-btn>
-        <v-btn
-          color="primary"
-          prepend-icon="mdi-plus"
-          @click="showCreateDialog = true"
-        >
-          新しい相場価格を設定
-        </v-btn>
+        <v-tooltip text="現在レート操作は無効化されています（1BTC=1JPY固定運用中）">
+          <template #activator="{ props: tooltipProps }">
+            <span v-bind="tooltipProps">
+              <v-btn
+                color="secondary"
+                variant="outlined"
+                prepend-icon="mdi-upload"
+                disabled
+              >
+                CSV一括アップロード
+              </v-btn>
+            </span>
+          </template>
+        </v-tooltip>
+        <v-tooltip text="現在レート操作は無効化されています（1BTC=1JPY固定運用中）">
+          <template #activator="{ props: tooltipProps }">
+            <span v-bind="tooltipProps">
+              <v-btn
+                color="primary"
+                prepend-icon="mdi-plus"
+                disabled
+              >
+                新しい相場価格を設定
+              </v-btn>
+            </span>
+          </template>
+        </v-tooltip>
       </div>
     </div>
 
@@ -128,43 +140,26 @@
           <span v-else class="text-gray-400">-</span>
         </template>
 
-        <template #[`item.actions`]="{ item }">
-          <v-btn
-            size="small"
-            variant="text"
-            color="primary"
-            @click="openEditDialog(item)"
-          >
-            <Icon name="mdi:pencil" />
-            編集
-          </v-btn>
+        <template #[`item.actions`]="{ item: _item }">
+          <v-tooltip text="現在レート操作は無効化されています（1BTC=1JPY固定運用中）">
+            <template #activator="{ props: tooltipProps }">
+              <span v-bind="tooltipProps">
+                <v-btn size="small" variant="text" color="primary" disabled>
+                  <Icon name="mdi:pencil" />
+                  編集
+                </v-btn>
+              </span>
+            </template>
+          </v-tooltip>
         </template>
       </v-data-table>
     </v-card>
 
-    <!-- Create Rate Dialog -->
-    <AdminCreateMarketRateDialog
-      v-model="showCreateDialog"
-      @created="handleRateCreated"
-    />
-
-    <!-- Edit Rate Dialog -->
-    <AdminEditMarketRateDialog
-      v-model="showEditDialog"
-      :market-rate="selectedRate"
-      @updated="handleRateUpdated"
-    />
-
-    <!-- CSV Upload Dialog -->
-    <AdminCSVUploadDialog
-      v-model="showCSVUploadDialog"
-      @uploaded="handleCSVUploaded"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
-import type { MarketRate, CSVUploadResponse } from '~/types'
+import type { MarketRate } from '~/types'
 
 definePageMeta({
   middleware: 'auth',
@@ -177,22 +172,18 @@ useHead({
 })
 
 const logger = useLogger({ prefix: '[AdminRates]' })
-const { showSuccess: _showSuccess, showError } = useNotification()
+const { showError } = useNotification()
 const apiClient = useApiClient()
 
 // State
 const rates = ref<MarketRate[]>([])
 const latestRate = ref<MarketRate | null>(null)
 const loading = ref(false)
-const showCreateDialog = ref(false)
-const showEditDialog = ref(false)
-const showCSVUploadDialog = ref(false)
-const selectedRate = ref<MarketRate | null>(null)
 
 // Table headers
 const headers = [
   { title: '設定日時', key: 'timestamp', sortable: true },
-  { title: 'BTC価格', key: 'btc_jpy_rate', sortable: true },
+  { title: '価格', key: 'btc_jpy_rate', sortable: true },
   { title: '前回からの変動', key: 'change', sortable: false },
   { title: '作成日時', key: 'created_at', sortable: true },
   { title: 'アクション', key: 'actions', sortable: false, width: 120 }
@@ -252,27 +243,6 @@ const loadRates = async () => {
   } finally {
     loading.value = false
   }
-}
-
-const handleRateCreated = () => {
-  showCreateDialog.value = false
-  loadRates()
-}
-
-const openEditDialog = (rate: MarketRate) => {
-  selectedRate.value = rate
-  showEditDialog.value = true
-}
-
-const handleRateUpdated = () => {
-  showEditDialog.value = false
-  selectedRate.value = null
-  loadRates()
-}
-
-const handleCSVUploaded = () => {
-  showCSVUploadDialog.value = false
-  loadRates()
 }
 
 // Utility functions

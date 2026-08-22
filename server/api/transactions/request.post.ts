@@ -25,7 +25,22 @@ export default defineEventHandler(async (event) => {
     
     const dynamodb = getDynamoDBService()
     const transactionsTableName = dynamodb.getTableName('transactions')
-    
+    const marketRatesTableName = dynamodb.getTableName('market_rates')
+
+    // リクエスト時点のレートでJPY換算額をスナップショット保存する
+    // （現在はレート固定運用のため実質amountと同値だが、将来のレート変動再開に備える）
+    let requestedJpyAmount: number | undefined
+    try {
+      const ratesResult = await dynamodb.scan(marketRatesTableName)
+      const rates = ratesResult.items as { timestamp: string; btc_jpy_rate: number }[]
+      if (rates.length > 0) {
+        const latestRate = rates.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
+        requestedJpyAmount = Math.round(body.amount * latestRate.btc_jpy_rate)
+      }
+    } catch (rateError: unknown) {
+      logger.warn('レート取得に失敗したため、requested_jpy_amountのスナップショットを省略します:', rateError)
+    }
+
     // 1. 既存の承認待ちリクエストをチェック
     const existingPendingResult = await dynamodb.query(
       transactionsTableName,
@@ -86,7 +101,8 @@ export default defineEventHandler(async (event) => {
       memo: body.memo || '',
       reason: body.reason,
       status: TRANSACTION_STATUS.PENDING,
-      requested_at: now
+      requested_at: now,
+      requested_jpy_amount: requestedJpyAmount
     }
     
     await dynamodb.put(transactionsTableName, transactionRequest as any)

@@ -38,6 +38,8 @@ BTC Mock Appのドキュメント集です。システムの仕様書、利用�
 | `20250728_todo.txt` | 開発TODOリスト |
 | `questions_for_specification.md` | 仕様策定時の質問事項 |
 | `auth_improvement_proposal.md` | 認証システム改善提案書 |
+| `20260819_renovation_design.md` | モバイル対応・円建て統一・セグメント機能 設計ドキュメント |
+| `20260819_renovation_implementation_plan.md` | 上記の実装計画 |
 
 ## 主要仕様書の概要
 

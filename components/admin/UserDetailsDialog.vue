@@ -102,28 +102,25 @@
               <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <label class="text-sm font-medium text-blue-600">現在の残高</label>
                 <p class="mt-1 text-lg font-bold text-blue-900 font-mono">
-                  {{ formatBTC(dashboardData.currentBalance) }} BTC
-                </p>
-                <p class="text-sm text-blue-700">
-                  {{ formatNumber(dashboardData.currentValue) }} JPY
+                  ¥{{ formatNumber(dashboardData.currentValue) }}
                 </p>
               </div>
               <div class="bg-green-50 border border-green-200 rounded-lg p-4">
                 <label class="text-sm font-medium text-green-600">入金元本</label>
                 <p class="mt-1 text-lg font-bold text-green-900 font-mono">
-                  {{ formatBTC(dashboardData.depositPrincipal) }} BTC
+                  ¥{{ formatNumber(dashboardData.depositPrincipal) }}
                 </p>
               </div>
               <div class="bg-orange-50 border border-orange-200 rounded-lg p-4">
                 <label class="text-sm font-medium text-orange-600">出金額</label>
                 <p class="mt-1 text-lg font-bold text-orange-900 font-mono">
-                  {{ formatBTC(dashboardData.withdrawalTotal) }} BTC
+                  ¥{{ formatNumber(dashboardData.withdrawalTotal) }}
                 </p>
               </div>
               <div class="bg-purple-50 border border-purple-200 rounded-lg p-4">
                 <label class="text-sm font-medium text-purple-600">クレジットボーナス</label>
                 <p class="mt-1 text-lg font-bold text-purple-900 font-mono">
-                  {{ formatBTC(dashboardData.creditBonus) }} BTC
+                  ¥{{ formatNumber(dashboardData.creditBonus) }}
                 </p>
               </div>
               <div class="md:col-span-2" :class="[
@@ -142,7 +139,7 @@
                     dashboardData.netProfit < 0 ? 'text-red-900' :
                       'text-gray-900'
                 ]">
-                  {{ formatBTC(dashboardData.netProfit) }} BTC
+                  ¥{{ formatNumber(dashboardData.netProfit) }}
                 </p>
                 <p class="text-xs text-gray-500 mt-1">残高 - 元本 + 出金額</p>
               </div>
@@ -167,7 +164,7 @@
 
 <script setup lang="ts">
 import type { User, DashboardData } from '~/types'
-import { formatNumber, formatBTC } from '~/utils/format'
+import { formatNumber } from '~/utils/format'
 
 // Props & Emits
 const props = defineProps<{

@@ -24,7 +24,7 @@
                 class="bg-blue-50 p-3 rounded-lg border border-blue-200">
                 <div v-if="isBalanceLoaded" class="flex items-center justify-between text-sm">
                   <span class="font-medium text-blue-700">現在の残高:</span>
-                  <span class="font-mono text-blue-900">{{ safeCurrentBalance.toFixed(8) }} BTC</span>
+                  <span class="font-mono text-blue-900">{{ formatNumber(safeCurrentBalance) }}円</span>
                 </div>
                 <div v-else class="text-sm text-blue-700">
                   残高を取得中...
@@ -33,7 +33,7 @@
 
               <!-- Withdrawal Warning -->
               <v-alert v-if="isInsufficientBalance" type="error" variant="tonal" density="compact" class="mt-2">
-                残高が不足しています。最大出金可能額: {{ safeCurrentBalance.toFixed(8) }} BTC
+                残高が不足しています。最大出金可能額: {{ formatNumber(safeCurrentBalance) }}円
               </v-alert>
             </div>
 
@@ -78,6 +78,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import type { TransactionRequestForm, DashboardData } from '~/types'
 import CurrencyInput from '~/components/common/CurrencyInput.vue'
+import { formatNumber } from '~/utils/format'
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]

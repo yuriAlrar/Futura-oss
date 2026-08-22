@@ -18,7 +18,7 @@
               </div>
               <div>
                 <span class="text-gray-600">金額:</span>
-                <span class="ml-2 font-mono">{{ formatBTC(request.amount) }} BTC</span>
+                <span class="ml-2 font-mono">¥{{ formatNumber(Math.abs(request.amount)) }}</span>
               </div>
               <div class="col-span-2">
                 <span class="text-gray-600">理由:</span>
@@ -63,7 +63,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { TRANSACTION_STATUS } from '~/types'
-import { formatBTC } from '~/utils/format'
+import { formatNumber } from '~/utils/format'
 
 const apiClient = useApiClient()
 

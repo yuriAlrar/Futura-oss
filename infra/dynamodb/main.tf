@@ -9,6 +9,18 @@ resource "aws_dynamodb_table" "users" {
     type = "S"
   }
 
+  attribute {
+    name = "parent_user_id"
+    type = "S"
+  }
+
+  # GSI for looking up sub-accounts belonging to a parent (main) account
+  global_secondary_index {
+    name            = "ParentUserIndex"
+    hash_key        = "parent_user_id"
+    projection_type = "ALL"
+  }
+
   # Point-in-time recovery
   point_in_time_recovery {
     enabled = true
@@ -282,5 +294,82 @@ resource "aws_dynamodb_table" "batch_operations" {
 
   tags = {
     Name = "${var.project_name}-${var.environment}-batch-operations"
+  }
+}
+
+# Segments Table (運用セグメントのマスタ。Cognitoグループとは独立して管理する)
+resource "aws_dynamodb_table" "segments" {
+  name           = "${var.project_name}-${var.environment}-segments"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "segment_id"
+
+  attribute {
+    name = "segment_id"
+    type = "S"
+  }
+
+  # Point-in-time recovery
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-segments"
+  }
+}
+
+# User Segments Table (ユーザー<->セグメントの多対多紐付け。隣接リストパターン)
+resource "aws_dynamodb_table" "user_segments" {
+  name           = "${var.project_name}-${var.environment}-user-segments"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "pk" # SEGMENT#{segment_id}
+  range_key      = "sk" # USER#{user_id}
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  # GSI for looking up all segments a given user belongs to (pk/sk swapped)
+  global_secondary_index {
+    name            = "UserSegmentIndex"
+    hash_key        = "sk"
+    range_key       = "pk"
+    projection_type = "ALL"
+  }
+
+  # Point-in-time recovery
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-user-segments"
+  }
+}
+
+# Invites Table (招待制登録用の使い切りコード)
+resource "aws_dynamodb_table" "invites" {
+  name           = "${var.project_name}-${var.environment}-invites"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "invite_code"
+
+  attribute {
+    name = "invite_code"
+    type = "S"
+  }
+
+  # Point-in-time recovery
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-invites"
   }
 }

@@ -133,7 +133,7 @@
                 <td class="px-6 py-4 whitespace-nowrap">
                   <div class="text-sm font-mono text-gray-900">
                     <span :class="request.transaction_type === 'deposit' ? 'text-green-600' : 'text-red-600'">
-                      {{ formatBTC(request.amount, request.transaction_type) }} BTC
+                      {{ getTransactionTypeSign(request.transaction_type, request.amount) }}¥{{ formatNumber(Math.abs(request.amount)) }}
                     </span>
                   </div>
                 </td>
@@ -203,8 +203,8 @@
 import { ref, computed, onMounted } from 'vue'
 import type { Transaction } from '~/types'
 import { TRANSACTION_STATUS } from '~/types'
-import { getTransactionTypeLabel, getTransactionTypeColor } from '~/utils/transaction'
-import { formatBTC } from '~/utils/format'
+import { getTransactionTypeLabel, getTransactionTypeSign } from '~/utils/transaction'
+import { formatNumber } from '~/utils/format'
 
 definePageMeta({
   middleware: 'auth'
@@ -226,7 +226,6 @@ const page = ref(1)
 const limit = ref(20)
 const totalCount = ref(0)
 const hasMore = ref(false)
-const currentRate = ref(0)
 const showRequestDialog = ref(false)
 
 // Status options
@@ -339,18 +338,7 @@ const getEmptyMessage = () => {
   }
 }
 
-// Load current rate
-const loadCurrentRate = async () => {
-  try {
-    const response = await apiClient.get<any>('/market-rates/latest')
-    currentRate.value = response.data!.btc_jpy_rate
-  } catch (error) {
-    logger.error('レート取得エラー:', error)
-  }
-}
-
 onMounted(() => {
   loadRequests()
-  loadCurrentRate()
 })
 </script>

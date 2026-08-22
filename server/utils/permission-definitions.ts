@@ -49,6 +49,13 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition = {
         { key: 'transaction:request', label: '取引申請', description: '取引の申請・リクエスト' }
       ]
     },
+    account_user: {
+      label: 'アカウント',
+      level: 'user',
+      permissions: [
+        { key: 'account:create-sub', label: 'サブアカウント作成', description: '自身に紐づくサブアカウントの作成' }
+      ]
+    },
     market_rate_user: {
       label: '市場レート（閲覧）',
       level: 'user',
@@ -101,11 +108,30 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition = {
       ]
     },
     batch_operations: {
-      label: 'BTC一括調整',
+      label: '一括調整',
       level: 'admin',
       permissions: [
-        { key: 'batch:execute', label: 'BTC一括調整実行', description: 'BTC残高の一括調整実行' },
-        { key: 'batch:read', label: 'BTC一括調整閲覧', description: 'BTC一括調整履歴の閲覧' }
+        { key: 'batch:execute', label: '一括調整実行', description: '残高の一括調整実行' },
+        { key: 'batch:read', label: '一括調整閲覧', description: '一括調整履歴の閲覧' }
+      ]
+    },
+    segment: {
+      label: 'セグメント管理',
+      level: 'admin',
+      permissions: [
+        { key: 'segment:create', label: 'セグメント作成', description: '運用セグメントの作成' },
+        { key: 'segment:read', label: 'セグメント閲覧', description: '運用セグメント情報・所属ユーザーの参照' },
+        { key: 'segment:update', label: 'セグメント編集', description: '運用セグメント情報・所属ユーザーの編集' },
+        { key: 'segment:delete', label: 'セグメント削除', description: '運用セグメントの削除' }
+      ]
+    },
+    invite: {
+      label: '招待コード管理',
+      level: 'admin',
+      permissions: [
+        { key: 'invite:create', label: '招待コード発行', description: '新規登録用の招待コード発行' },
+        { key: 'invite:read', label: '招待コード閲覧', description: '招待コード一覧の参照' },
+        { key: 'invite:revoke', label: '招待コード失効', description: '招待コードの失効' }
       ]
     }
   },
@@ -123,7 +149,7 @@ export const DEFAULT_GROUP_PERMISSIONS = {
     return PERMISSION_DEFINITIONS.allPermissions.map(p => p.key)
   },
   user: [
-    'profile:read', 'profile:update', 'transaction:read', 'transaction:request', 'dashboard:access', 'market_rate:read'
+    'profile:read', 'profile:update', 'transaction:read', 'transaction:request', 'dashboard:access', 'market_rate:read', 'account:create-sub'
   ]
 }
 
