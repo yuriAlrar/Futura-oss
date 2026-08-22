@@ -29,6 +29,7 @@ BTC Mock Appのドキュメント集です。システムの仕様書、利用�
 | `README_api.md` | API利用ガイド |
 | `README_database.md` | データベース利用ガイド |
 | `aws-client-factory.md` | AWS連携ガイド |
+| `deployment_runbook.md` | 初期環境構築・インフラ変更・Amplifyデプロイの手順書 |
 
 ### 📁 `artifacts/` - アーティファクト
 開発過程で作成された資料や提案書などの成果物です。

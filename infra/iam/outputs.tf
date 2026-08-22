@@ -22,3 +22,8 @@ output "cognito_access_policy_arn" {
   description = "Cognito access policy ARN"
   value       = aws_iam_policy.cognito_access.arn
 }
+
+output "amplify_ssr_compute_role_arn" {
+  description = "IAM role ARN to attach as the Amplify Hosting SSR Compute role (App settings > IAM roles > Compute role)"
+  value       = aws_iam_role.amplify_ssr_compute.arn
+}

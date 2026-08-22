@@ -28,6 +28,11 @@ output "lambda_function_arns" {
   value       = module.lambda.function_arns
 }
 
+output "amplify_ssr_compute_role_arn" {
+  description = "IAM role ARN to attach as the Amplify Hosting SSR Compute role"
+  value       = module.iam.amplify_ssr_compute_role_arn
+}
+
 output "administrator_group_name" {
   description = "Administrator group name"
   value       = module.cognito.administrator_group_name

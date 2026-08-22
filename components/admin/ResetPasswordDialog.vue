@@ -19,7 +19,7 @@
           </div>
         </div>
 
-        <v-form ref="formRef" @submit.prevent="resetPassword">
+        <v-form ref="formRef" v-model="isFormValid" @submit.prevent="resetPassword">
           <v-text-field
             v-model="temporaryPassword"
             label="新しい仮パスワード *"
@@ -70,6 +70,7 @@
         <v-btn
           color="primary"
           :loading="loading"
+          :disabled="!isFormValid"
           @click="resetPassword"
         >
           リセット
@@ -101,6 +102,7 @@ const { showSuccess, showError } = useNotification()
 // State
 const formRef = ref()
 const loading = ref(false)
+const isFormValid = ref(false)
 const showPassword = ref(false)
 const temporaryPassword = ref('')
 

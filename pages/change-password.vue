@@ -8,7 +8,7 @@
 
       <v-card class="card-shadow">
         <v-card-text class="p-6">
-          <v-form ref="formRef" @submit.prevent="changePassword">
+          <v-form ref="formRef" v-model="isFormValid" @submit.prevent="changePassword">
             <div class="space-y-4">
               <v-text-field v-model="form.currentPassword" label="現在のパスワード *"
                 :type="showCurrentPassword ? 'text' : 'password'" variant="outlined" :rules="currentPasswordRules"
@@ -67,7 +67,7 @@
               <v-btn variant="outlined" to="/profile">
                 キャンセル
               </v-btn>
-              <v-btn color="primary" :loading="loading" @click="changePassword">
+              <v-btn color="primary" :loading="loading" :disabled="!isFormValid" @click="changePassword">
                 パスワードを変更
               </v-btn>
             </div>
@@ -111,6 +111,7 @@ const { showSuccess, showError } = useNotification()
 
 // State
 const loading = ref(false)
+const isFormValid = ref(false)
 const showCurrentPassword = ref(false)
 const showNewPassword = ref(false)
 const showConfirmPassword = ref(false)
