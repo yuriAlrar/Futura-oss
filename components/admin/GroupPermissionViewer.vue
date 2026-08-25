@@ -221,8 +221,8 @@ const adminPermissions = [
   { key: 'group:read', label: 'グループ参照', icon: 'mdi:account-group' },
   { key: 'group:update', label: 'グループ更新', icon: 'mdi:account-edit-outline' },
   { key: 'group:delete', label: 'グループ削除', icon: 'mdi:account-remove-outline' },
-  { key: 'batch:execute', label: 'BTC一括調整実行', icon: 'mdi:bitcoin' },
-  { key: 'batch:read', label: 'BTC一括調整閲覧', icon: 'mdi:history' }
+  { key: 'batch:execute', label: '一括調整実行', icon: 'mdi:cash-multiple' },
+  { key: 'batch:read', label: '一括調整閲覧', icon: 'mdi:history' }
 ]
 
 const transactionPermissions = [

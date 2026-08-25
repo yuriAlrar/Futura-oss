@@ -17,6 +17,12 @@ export default defineEventHandler(async (event) => {
   if (path.startsWith('/api/auth/')) {
     return
   }
+
+  // 未認証で利用する公開API（招待コード確認・新規登録等）はスキップ
+  // ※ これらのエンドポイント自体が招待コードの検証等で保護される
+  if (path.startsWith('/api/public/')) {
+    return
+  }
   
   logger.debug(`権限チェック開始: ${method} ${path}`)
   

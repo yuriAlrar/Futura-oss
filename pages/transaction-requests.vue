@@ -15,13 +15,16 @@
           </button>
           <button
             class="flex items-center justify-center px-4 py-2 sm:px-6 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:bg-secondary-400 disabled:cursor-not-allowed transition-all duration-200 font-medium whitespace-nowrap"
-            :disabled="hasPendingRequest" @click="showRequestDialog = true">
+            :disabled="hasPendingRequest || isProfileUnapproved" @click="showRequestDialog = true">
             <Icon name="mdi:plus" class="text-lg sm:mr-2" />
             <span class="hidden sm:inline">新しいリクエスト</span>
             <span class="sm:hidden">新規</span>
           </button>
         </div>
       </div>
+      <p v-if="isProfileUnapproved" class="text-xs text-orange-600 mt-2 text-right">
+        プロフィールが未承認のため、新しいリクエストは送信できません
+      </p>
     </div>
 
     <!-- Status Cards -->
@@ -99,22 +102,22 @@
           <table class="w-full">
             <thead class="bg-gray-50">
               <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   種別
                 </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   金額
                 </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   理由・メモ
                 </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   リクエスト日時
                 </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   ステータス
                 </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   処理日時
                 </th>
               </tr>
@@ -133,7 +136,7 @@
                 <td class="px-6 py-4 whitespace-nowrap">
                   <div class="text-sm font-mono text-gray-900">
                     <span :class="request.transaction_type === 'deposit' ? 'text-green-600' : 'text-red-600'">
-                      {{ formatBTC(request.amount, request.transaction_type) }} BTC
+                      {{ getTransactionTypeSign(request.transaction_type, request.amount) }}¥{{ formatNumber(Math.abs(request.amount)) }}
                     </span>
                   </div>
                 </td>
@@ -203,8 +206,8 @@
 import { ref, computed, onMounted } from 'vue'
 import type { Transaction } from '~/types'
 import { TRANSACTION_STATUS } from '~/types'
-import { getTransactionTypeLabel, getTransactionTypeColor } from '~/utils/transaction'
-import { formatBTC } from '~/utils/format'
+import { getTransactionTypeLabel, getTransactionTypeSign } from '~/utils/transaction'
+import { formatNumber } from '~/utils/format'
 
 definePageMeta({
   middleware: 'auth'
@@ -226,8 +229,8 @@ const page = ref(1)
 const limit = ref(20)
 const totalCount = ref(0)
 const hasMore = ref(false)
-const currentRate = ref(0)
 const showRequestDialog = ref(false)
+const profileApproved = ref<boolean | null>(null)
 
 // Status options
 const statusOptions = [
@@ -261,6 +264,10 @@ const hasPendingRequest = computed(() => {
   return pendingCount.value > 0
 })
 
+const isProfileUnapproved = computed(() => {
+  return profileApproved.value === false
+})
+
 // Methods
 const loadRequests = async () => {
   loading.value = true
@@ -284,6 +291,11 @@ const loadRequests = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const loadProfileApproval = async () => {
+  const response = await apiClient.get<{ profile_approved: boolean }>('/profile')
+  profileApproved.value = response.success ? (response.data?.profile_approved ?? null) : null
 }
 
 const filterRequests = () => {
@@ -339,18 +351,8 @@ const getEmptyMessage = () => {
   }
 }
 
-// Load current rate
-const loadCurrentRate = async () => {
-  try {
-    const response = await apiClient.get<any>('/market-rates/latest')
-    currentRate.value = response.data!.btc_jpy_rate
-  } catch (error) {
-    logger.error('レート取得エラー:', error)
-  }
-}
-
 onMounted(() => {
   loadRequests()
-  loadCurrentRate()
+  loadProfileApproval()
 })
 </script>

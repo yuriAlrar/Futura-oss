@@ -36,7 +36,7 @@ const drawChart = () => {
   ctx.clearRect(0, 0, width, height)
 
   // Get data values
-  const values = props.data.map(item => item.btc_amount)
+  const values = props.data.map(item => item.jpy_value)
   const _dates = props.data.map(item => item.date)
   
   const maxValue = Math.max(...values, 0)
@@ -80,7 +80,7 @@ const drawChart = () => {
     ctx.moveTo(getX(0), height - padding)
     
     props.data.forEach((item, index) => {
-      ctx.lineTo(getX(index), getY(item.btc_amount))
+      ctx.lineTo(getX(index), getY(item.jpy_value))
     })
     
     ctx.lineTo(getX(props.data.length - 1), height - padding)
@@ -95,7 +95,7 @@ const drawChart = () => {
   
   props.data.forEach((item, index) => {
     const x = getX(index)
-    const y = getY(item.btc_amount)
+    const y = getY(item.jpy_value)
     
     if (index === 0) {
       ctx.moveTo(x, y)
@@ -110,7 +110,7 @@ const drawChart = () => {
   ctx.fillStyle = '#22c55e'
   props.data.forEach((item, index) => {
     const x = getX(index)
-    const y = getY(item.btc_amount)
+    const y = getY(item.jpy_value)
     
     ctx.beginPath()
     ctx.arc(x, y, 3, 0, 2 * Math.PI)
@@ -130,18 +130,12 @@ const drawChart = () => {
     ctx.fillText(label, x, height - 10)
   }
 
-  // Y-axis labels
+  // Y-axis labels（円表記、カンマ区切り）
   ctx.textAlign = 'right'
   for (let i = 0; i <= 4; i++) {
     const value = minValue + (i / 4) * valueRange
     const y = height - padding - ((value - minValue) / valueRange) * (height - 2 * padding)
-    const label = value >= 1 
-      ? `${value.toFixed(2)}`
-      : value >= 0.01
-      ? `${value.toFixed(4)}`
-      : value >= 0.0001
-      ? `${value.toFixed(6)}`
-      : `${value.toFixed(8)}`
+    const label = `¥${Math.round(value).toLocaleString('ja-JP')}`
     ctx.fillText(label, padding - 10, y + 4)
   }
 }

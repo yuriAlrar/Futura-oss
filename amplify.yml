@@ -32,9 +32,12 @@ frontend:
             npm run build
           fi
   artifacts:
-    # IMPORTANT - Please verify your build output directory
-    baseDirectory: .output
+    # Nitroの'aws-amplify'プリセットが生成する、Amplify Hosting SSRデプロイ仕様に
+    # 準拠したディレクトリ（static/compute/deploy-manifest.json）を出力先とする
+    baseDirectory: .amplify-hosting
     files:
       - '**/*'
   cache:
-    paths: []
+    paths:
+      - node_modules/**/*
+      - .npm/**/*

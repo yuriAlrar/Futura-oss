@@ -8,31 +8,6 @@ import { useLogger } from '~/composables/useLogger'
 const logger = useLogger({ prefix: '[BatchHelpers]' })
 
 /**
- * アクティブなユーザー一覧を取得
- */
-export async function getActiveUsers(): Promise<User[]> {
-  const dynamodb = getDynamoDBService()
-  const usersTableName = dynamodb.getTableName('users')
-
-  try {
-    const result = await dynamodb.scan(usersTableName, {
-      filterExpression: '#status = :active',
-      expressionAttributeNames: {
-        '#status': 'status'
-      },
-      expressionAttributeValues: {
-        ':active': 'active'
-      }
-    })
-
-    return result.items as User[]
-  } catch (error) {
-    logger.error('アクティブユーザー取得エラー:', error)
-    throw error
-  }
-}
-
-/**
  * 特定ユーザーの現在の残高を取得
  */
 export async function getUserBalance(userId: string): Promise<number> {
@@ -65,7 +40,8 @@ export async function createBatchOperation(
   adjustmentRate: number,
   targetUserCount: number,
   createdBy: string,
-  memo?: string
+  memo?: string,
+  targetSegmentId?: string
 ): Promise<BatchOperation> {
   const dynamodb = getDynamoDBService()
   const batchOperationsTableName = dynamodb.getTableName('batch_operations')
@@ -81,7 +57,8 @@ export async function createBatchOperation(
     status: BATCH_OPERATION_STATUS.PENDING,
     created_by: createdBy,
     created_at: now,
-    memo
+    memo,
+    target_segment_id: targetSegmentId
   }
 
   await dynamodb.put(batchOperationsTableName, batchOperation as unknown as Record<string, unknown>)
@@ -276,7 +253,7 @@ export async function createBatchTransactions(
         timestamp: now,
         created_by: createdBy,
         reason: '資産運用',
-        memo: `asset_manage_id: ${batchId}${memo ? ` | ${memo}` : ''}`
+        memo: `AMI: ${batchId}${memo ? ` | ${memo}` : ''}`
       }
 
       transactions.push(transaction)

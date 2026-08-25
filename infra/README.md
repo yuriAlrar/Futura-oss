@@ -143,7 +143,7 @@ infra/
 | リソース | 説明 | 用途 |
 |---------|------|------|
 | **Cognito User Pool** | ユーザー認証・認可 | ユーザー管理、JWT発行 |
-| **DynamoDB テーブル (5個)** | NoSQLデータベース | ユーザー、取引、市場レート、セッション、権限 |
+| **DynamoDB テーブル (9個)** | NoSQLデータベース | ユーザー、取引、市場レート、セッション、権限、一括操作、セグメント、ユーザーセグメント、招待コード |
 | **S3 バケット** | オブジェクトストレージ | プロフィール画像などのファイル保存 |
 | **IAM ロール/ポリシー** | 権限管理 | Lambda実行ロール、アクセス制御 |
 | **Lambda 関数** | サーバーレス関数 | プレースホルダー(将来の拡張用) |
@@ -152,10 +152,14 @@ infra/
 ### DynamoDBテーブル詳細
 
 1. **users**: ユーザープロフィール情報
-2. **transactions**: Bitcoin取引履歴
-3. **market_rates**: Bitcoin市場価格データ
+2. **transactions**: 入出金・資産運用の取引履歴
+3. **market_rates**: 相場価格データ（現在は1BTC=1JPY固定運用）
 4. **sessions**: セッション管理
 5. **permissions**: ユーザー権限管理
+6. **batch_operations**: 一括資産調整の実行履歴
+7. **segments**: 運用セグメントのマスタ
+8. **user_segments**: ユーザーとセグメントの紐付け
+9. **invites**: 招待制登録用の招待コード
 
 すべてのテーブルでポイントインタイムリカバリ(PITR)が有効化されています。
 
@@ -229,6 +233,16 @@ Cognito User Pool Domainは**AWSリージョン内でユニーク**である必�
 ## デプロイ後の設定
 
 デプロイが完了したら、以下の出力値をNuxtアプリケーションの環境変数に設定してください。
+
+### ⚠️ Amplify SSR Compute roleの割り当て（必須・環境構築時に毎回必要）
+
+`server/api/**`はAmplify Hosting Compute上で動作するため、DynamoDB/Cognitoへのアクセスには専用のIAMロール（Compute role）が必要です。このロールは本モジュール（`amplify_ssr_compute`）で作成されますが、**Amplify App自体はTerraform管理外のため、Amplifyコンソール側での紐付けを手動で行う必要があります**。これを忘れるとログイン処理が`Could not load credentials from any providers`エラーで失敗します。
+
+```bash
+terraform output amplify_ssr_compute_role_arn
+```
+
+Amplifyコンソール → 対象アプリ →「App settings」→「IAM roles」→「Compute role」→ 上記ロールを選択して保存。詳細は[deployment_runbook.md](../doc/guides/deployment_runbook.md#e-amplifyアプリの作成)を参照。
 
 ### 出力値の確認
 

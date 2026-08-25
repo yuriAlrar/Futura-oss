@@ -34,7 +34,7 @@
               class="font-mono font-semibold text-lg"
               :class="getTransactionTypeTextColor(transaction.transaction_type)"
             >
-              {{ getTransactionTypeSign(transaction.transaction_type, transaction.amount) }}{{ Math.abs(transaction.amount) }} BTC
+              {{ getTransactionTypeSign(transaction.transaction_type, transaction.amount) }}¥{{ formatNumber(Math.abs(transaction.amount)) }}
             </span>
           </div>
 
@@ -96,13 +96,14 @@
 
 <script setup lang="ts">
 import type { Transaction } from '~/types'
-import { 
-  getTransactionTypeLabel, 
-  getTransactionTypeColor, 
-  getTransactionTypeIcon, 
-  getTransactionTypeTextColor, 
-  getTransactionTypeSign 
+import {
+  getTransactionTypeLabel,
+  getTransactionTypeColor,
+  getTransactionTypeIcon,
+  getTransactionTypeTextColor,
+  getTransactionTypeSign
 } from '~/utils/transaction'
+import { formatNumber } from '~/utils/format'
 
 // Props & Emits
 const _props = defineProps<{

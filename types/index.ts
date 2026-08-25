@@ -13,6 +13,10 @@ export interface User {
   created_at: string
   updated_at: string
   deleted_at?: string
+  // サブアカウント関連: 本アカウントのuser_id（サブアカウントの場合のみ設定。本アカウント自身は未設定）
+  parent_user_id?: string
+  // 運用停止ステート（アカウントのログイン可否とは独立。一括操作の対象除外にのみ影響）
+  operation_status?: 'active' | 'suspended'
 }
 
 // Transaction status constants
@@ -40,6 +44,7 @@ export interface Transaction {
   processed_at?: string     // 承認/拒否処理日時（ISO 8601）
   processed_by?: string     // 処理者のuser_id
   rejection_reason?: string // 拒否理由（status='rejected'の場合）
+  requested_jpy_amount?: number // リクエスト時点のJPY換算額スナップショット（将来のレート変動再開に備える）
 }
 
 // 拡張されたTransaction型（新機能で明示的に使用）
@@ -377,11 +382,13 @@ export interface BatchOperation {
   completed_at?: string
   error_message?: string
   memo?: string
+  target_segment_id?: string // 対象を絞り込んだセグメントID（未指定の場合は全アクティブユーザーが対象）
 }
 
 export interface BatchOperationCreateForm {
   adjustment_rate: number
   memo?: string
+  target_segment_id?: string // 未指定の場合は全アクティブユーザーが対象
 }
 
 export interface BatchOperationResult {
@@ -394,4 +401,82 @@ export interface BatchOperationResult {
     user_id: string
     error: string
   }>
+}
+
+// ============================================================================
+// セグメント（運用グループ）関連の型
+// 権限のための「グループ」（Cognito管理）とは別概念。DynamoDBのみで管理する。
+// ============================================================================
+
+export interface Segment {
+  segment_id: string
+  name: string
+  description?: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SegmentCreateForm {
+  name: string
+  description?: string
+}
+
+export interface SegmentUpdateForm {
+  name?: string
+  description?: string
+}
+
+export interface SegmentWithMemberCount extends Segment {
+  member_count: number
+}
+
+export interface UserSegmentMembership {
+  segment_id: string
+  user_id: string
+  joined_at: string
+}
+
+// ============================================================================
+// 招待制登録関連の型
+// ============================================================================
+
+export const INVITE_STATUS = {
+  ACTIVE: 'active',
+  CONSUMED: 'consumed',
+  REVOKED: 'revoked'
+} as const
+
+export type InviteStatus = typeof INVITE_STATUS[keyof typeof INVITE_STATUS]
+
+export interface Invite {
+  invite_code: string
+  status: InviteStatus
+  created_by: string
+  created_at: string
+  consumed_by?: string
+  consumed_at?: string
+  revoked_at?: string
+}
+
+export interface PublicRegisterForm {
+  invite_code: string
+  email: string
+  name: string
+  phone_number: string
+  password: string
+}
+
+// ============================================================================
+// サブアカウント関連の型
+// ============================================================================
+
+export interface SubAccountCreateForm {
+  email: string
+  name: string
+}
+
+export interface SubAccountCreateResult {
+  user: User
+  temporary_password: string
 }

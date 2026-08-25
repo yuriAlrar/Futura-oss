@@ -55,16 +55,17 @@ class DynamoDBService {
     }
   }
 
-  async update(tableName: string, key: DynamoDBRecord, updateExpression: string, expressionAttributeValues: DynamoDBRecord, expressionAttributeNames?: Record<string, string>) {
+  async update(tableName: string, key: DynamoDBRecord, updateExpression: string, expressionAttributeValues: DynamoDBRecord, expressionAttributeNames?: Record<string, string>, conditionExpression?: string) {
     const command = new UpdateCommand({
       TableName: tableName,
       Key: key,
       UpdateExpression: updateExpression,
       ExpressionAttributeValues: expressionAttributeValues,
       ExpressionAttributeNames: expressionAttributeNames,
+      ConditionExpression: conditionExpression,
       ReturnValues: 'ALL_NEW'
     })
-    
+
     const response = await this.client.send(command)
     return response.Attributes
   }
@@ -168,14 +169,17 @@ class DynamoDBService {
   }
 
   // 特定のテーブル用のヘルパーメソッド
-  getTableName(table: 'users' | 'transactions' | 'market_rates' | 'sessions' | 'permissions' | 'batch_operations'): string {
+  getTableName(table: 'users' | 'transactions' | 'market_rates' | 'sessions' | 'permissions' | 'batch_operations' | 'segments' | 'user_segments' | 'invites'): string {
     const tableMap = {
       'users': this.config.dynamodbUsersTable,
       'transactions': this.config.dynamodbTransactionsTable,
       'market_rates': this.config.dynamodbMarketRatesTable,
       'sessions': this.config.dynamodbSessionsTable,
       'permissions': this.config.dynamodbPermissionsTable,
-      'batch_operations': this.config.dynamodbBatchOperationsTable
+      'batch_operations': this.config.dynamodbBatchOperationsTable,
+      'segments': this.config.dynamodbSegmentsTable,
+      'user_segments': this.config.dynamodbUserSegmentsTable,
+      'invites': this.config.dynamodbInvitesTable
     }
 
     const tableName = tableMap[table]
@@ -187,7 +191,10 @@ class DynamoDBService {
         market_rates: this.config.dynamodbMarketRatesTable,
         sessions: this.config.dynamodbSessionsTable,
         permissions: this.config.dynamodbPermissionsTable,
-        batch_operations: this.config.dynamodbBatchOperationsTable
+        batch_operations: this.config.dynamodbBatchOperationsTable,
+        segments: this.config.dynamodbSegmentsTable,
+        user_segments: this.config.dynamodbUserSegmentsTable,
+        invites: this.config.dynamodbInvitesTable
       })
       throw new Error(`Environment variable for table '${table}' is not configured`)
     }

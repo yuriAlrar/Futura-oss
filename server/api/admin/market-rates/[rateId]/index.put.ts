@@ -6,11 +6,9 @@ import type { MarketRate, MarketRateUpdateForm, ApiResponse } from '~/types'
 export default defineEventHandler(async (event): Promise<ApiResponse<MarketRate>> => {
   const logger = useLogger({ prefix: '[MarketRateUpdate]' })
   try {
-    // Require admin permission
     const currentUser = await requirePermission(event, 'market_rate:create')
 
     const rateId = getRouterParam(event, 'rateId')
-
     if (!rateId) {
       throw createError({
         statusCode: 400,
@@ -21,22 +19,20 @@ export default defineEventHandler(async (event): Promise<ApiResponse<MarketRate>
     const body = await readBody<MarketRateUpdateForm>(event)
     const { timestamp, btc_jpy_rate } = body
 
-    // Validation
     if (!timestamp || !btc_jpy_rate) {
       throw createError({
         statusCode: 400,
-        statusMessage: 'Timestamp and BTC rate are required'
+        statusMessage: 'Timestamp and rate are required'
       })
     }
 
     if (btc_jpy_rate <= 0) {
       throw createError({
         statusCode: 400,
-        statusMessage: 'BTC rate must be positive'
+        statusMessage: 'Rate must be positive'
       })
     }
 
-    // Validate timestamp format
     const rateDate = new Date(timestamp)
     if (isNaN(rateDate.getTime())) {
       throw createError({
@@ -48,24 +44,21 @@ export default defineEventHandler(async (event): Promise<ApiResponse<MarketRate>
     const dynamodb = getDynamoDBService()
     const tableName = dynamodb.getTableName('market_rates')
 
-    // Check if rate exists
     const existingRateResult = await dynamodb.scan(tableName, {
       filterExpression: 'rate_id = :rate_id',
       expressionAttributeValues: { ':rate_id': rateId }
     })
-    
+
     if (!existingRateResult || !existingRateResult.items || existingRateResult.items.length === 0) {
       throw createError({
         statusCode: 404,
         statusMessage: 'Market rate not found'
       })
     }
-    
-    const existingRate = existingRateResult.items[0] as MarketRate
 
+    const existingRate = existingRateResult.items[0] as MarketRate
     const now = new Date().toISOString()
 
-    // Create new market rate record with updated values
     const updatedMarketRate: MarketRate = {
       rate_id: rateId,
       timestamp,
@@ -76,7 +69,7 @@ export default defineEventHandler(async (event): Promise<ApiResponse<MarketRate>
       updated_by: currentUser.user_id
     }
 
-    // Use transaction to ensure atomic delete and create operation
+    // タイムスタンプがキーの一部のため、削除→作成のトランザクションで更新する
     await dynamodb.transactWrite([
       {
         Delete: {
@@ -95,14 +88,16 @@ export default defineEventHandler(async (event): Promise<ApiResponse<MarketRate>
       }
     ])
 
+    logger.info(`内部レートを更新しました: ${rateId} - ${currentUser.email} - ¥${btc_jpy_rate}`)
+
     return {
       success: true,
       data: updatedMarketRate,
       message: 'Market rate updated successfully'
     }
   } catch (error: unknown) {
-    logger.error('市場レート更新エラー:', error)
-    
+    logger.error('内部レート更新エラー:', error)
+
     if (error && typeof error === 'object' && 'statusCode' in error) {
       throw error
     }

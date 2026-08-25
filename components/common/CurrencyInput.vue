@@ -1,21 +1,21 @@
 <template>
   <div class="space-y-2">
-    <div class="flex flex-col sm:flex-row gap-2">
-      <v-select v-model="selectedCurrency" :items="currencyOptions" label="入力通貨" variant="outlined"
-        class="w-full sm:w-32 flex-shrink-0" @update:model-value="onCurrencyChange" />
-
-      <v-text-field v-if="selectedCurrency === 'JPY'" v-model.number="jpyAmount" label="金額（JPY） *" type="number"
-        step="1" variant="outlined" :rules="jpyAmountRules" suffix="JPY" hint="最新の相場レートでBTCに自動換算されます" persistent-hint
-        required class="flex-1" @input="convertJpyToBtc" />
-
-      <v-text-field v-else v-model.number="btcAmount" label="金額（BTC） *" type="number" step="0.00000001"
-        variant="outlined" :rules="btcAmountRules" suffix="BTC" hint="直接BTCで金額を入力します" persistent-hint required
-        class="flex-1" @input="convertBtcToJpy" />
-    </div>
+    <v-text-field
+      v-model.number="jpyAmount"
+      label="金額（円） *"
+      type="number"
+      step="1"
+      variant="outlined"
+      :rules="jpyAmountRules"
+      suffix="円"
+      :disabled="disabled"
+      required
+      @input="convertJpyToInternal"
+    />
 
     <!-- Rate Loading/Error State -->
     <v-alert v-if="rateError" type="error" variant="tonal" density="compact" class="mt-2">
-      相場レートの取得に失敗しました。BTCで直接入力してください。
+      レートの取得に失敗しました。時間をおいて再度お試しください。
     </v-alert>
   </div>
 </template>
@@ -24,7 +24,7 @@
 import type { MarketRate } from '~/types'
 
 interface Props {
-  modelValue: number // BTC amount
+  modelValue: number // 内部保存値（現在は円と等価な内部単位）
   maxBtc?: number
   maxJpy?: number
   disabled?: boolean
@@ -46,24 +46,11 @@ const logger = useLogger({ prefix: '[CurrencyInput]' })
 const apiClient = useApiClient()
 
 // State
-const selectedCurrency = ref<'BTC' | 'JPY'>('BTC')
 const jpyAmount = ref<number>(0)
-const btcAmount = ref<number>(props.modelValue || 0)
 const latestRate = ref<MarketRate | null>(null)
 const rateError = ref<boolean>(false)
 
-// Options
-const currencyOptions = [
-  { title: 'BTC', value: 'BTC' },
-  // { title: 'JPY', value: 'JPY' }
-]
-
 // Validation rules
-const btcAmountRules = [
-  (v: number) => !!v || '金額は必須です',
-  (v: number) => v > 0 || '金額は正の数値で入力してください'
-]
-
 const jpyAmountRules = [
   (v: number) => !!v || '金額は必須です',
   (v: number) => v > 0 || '金額は正の数値で入力してください'
@@ -80,64 +67,46 @@ const loadLatestRate = async () => {
       throw new Error('No market rate data available')
     }
   } catch (error) {
-    logger.error('相場レート取得エラー:', error)
+    logger.error('レート取得エラー:', error)
     rateError.value = true
     latestRate.value = null
   }
 }
 
-const convertJpyToBtc = () => {
+// 円入力値を内部保存値に変換（現在はレートが1固定のため実質等価だが、
+// 将来レート変動が再開された場合に備えてレート換算のロジックは維持する）
+const convertJpyToInternal = () => {
   if (!latestRate.value || !jpyAmount.value || isNaN(jpyAmount.value)) {
-    btcAmount.value = 0
     emit('update:modelValue', 0)
     return
   }
 
-  const calculatedBtc = jpyAmount.value / latestRate.value.btc_jpy_rate
-  btcAmount.value = isNaN(calculatedBtc) ? 0 : calculatedBtc
-  emit('update:modelValue', btcAmount.value)
+  const calculatedValue = jpyAmount.value / latestRate.value.btc_jpy_rate
+  emit('update:modelValue', isNaN(calculatedValue) ? 0 : calculatedValue)
 }
 
-const convertBtcToJpy = () => {
-  if (!latestRate.value || !btcAmount.value || isNaN(btcAmount.value)) {
+const convertInternalToJpy = () => {
+  if (!latestRate.value || !props.modelValue || isNaN(props.modelValue)) {
     jpyAmount.value = 0
     return
   }
 
-  const calculatedJpy = Math.round(btcAmount.value * latestRate.value.btc_jpy_rate)
+  const calculatedJpy = Math.round(props.modelValue * latestRate.value.btc_jpy_rate)
   jpyAmount.value = isNaN(calculatedJpy) ? 0 : calculatedJpy
-  emit('update:modelValue', btcAmount.value)
-}
-
-const onCurrencyChange = (currency: 'BTC' | 'JPY') => {
-  if (currency === 'JPY') {
-    // BTCからJPYモードに変更
-    convertBtcToJpy()
-  } else {
-    // JPYからBTCモードに変更
-    convertJpyToBtc()
-  }
 }
 
 // Watchers
-watch(() => props.modelValue, (newValue) => {
-  btcAmount.value = newValue || 0
-  if (selectedCurrency.value === 'JPY') {
-    convertBtcToJpy()
-  }
+watch(() => props.modelValue, () => {
+  convertInternalToJpy()
 })
 
 watch(latestRate, () => {
-  // レートが更新された時に再計算
-  if (selectedCurrency.value === 'JPY') {
-    convertJpyToBtc()
-  } else {
-    convertBtcToJpy()
-  }
+  convertInternalToJpy()
 })
 
 // Initialize
-onMounted(() => {
-  loadLatestRate()
+onMounted(async () => {
+  await loadLatestRate()
+  convertInternalToJpy()
 })
 </script>

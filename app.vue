@@ -25,14 +25,6 @@
 </template>
 
 <script setup>
-// Global meta tags
-useHead({
-  title: 'M・S CFD App',
-  meta: [
-    { name: 'description', content: 'M・S CFD Application' }
-  ]
-})
-
 // Global auth initialization and state
 const { isInitialized, initAuth } = useAuth()
 const logger = useLogger({ prefix: '[APP]' })

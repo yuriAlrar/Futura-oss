@@ -26,9 +26,9 @@
             <Icon name="mdi:plus-circle" class="text-2xl text-green-500" />
           </div>
           <p class="text-2xl font-bold text-green-600 font-mono">
-            {{ formatBTC(approvedDeposits) }} BTC
+            ¥{{ formatNumber(approvedDeposits) }}
           </p>
-          <p class="text-xs text-gray-500 mt-1">全体: {{ formatBTC(totalDeposits) }} BTC</p>
+          <p class="text-xs text-gray-500 mt-1">全体: ¥{{ formatNumber(totalDeposits) }}</p>
         </v-card-text>
       </v-card>
 
@@ -39,9 +39,9 @@
             <Icon name="mdi:minus-circle" class="text-2xl text-red-500" />
           </div>
           <p class="text-2xl font-bold text-red-600 font-mono">
-            {{ formatBTC(approvedWithdrawals) }} BTC
+            ¥{{ formatNumber(approvedWithdrawals) }}
           </p>
-          <p class="text-xs text-gray-500 mt-1">全体: {{ formatBTC(totalWithdrawals) }} BTC</p>
+          <p class="text-xs text-gray-500 mt-1">全体: ¥{{ formatNumber(totalWithdrawals) }}</p>
         </v-card-text>
       </v-card>
 
@@ -96,7 +96,7 @@
 
         <template #[`item.amount`]="{ item }">
           <span class="font-mono font-semibold text-lg" :class="getTransactionTypeTextColor(item.transaction_type)">
-            {{ getTransactionTypeSign(item.transaction_type, item.amount) }}{{ formatBTC(Math.abs(item.amount)) }} BTC
+            {{ getTransactionTypeSign(item.transaction_type, item.amount) }}¥{{ formatNumber(Math.abs(item.amount)) }}
           </span>
         </template>
 
@@ -113,7 +113,7 @@
 
         <template #[`item.running_balance`]="{ item }">
           <span class="font-mono text-sm text-gray-600">
-            {{ formatBTC(getRunningBalance(item)) }} BTC
+            ¥{{ formatNumber(getRunningBalance(item)) }}
           </span>
         </template>
 
@@ -129,7 +129,7 @@
 </template>
 
 <script setup lang="ts">
-import type { Transaction } from '~/types'
+import type { Transaction, PaginatedResponse } from '~/types'
 import {
   getTransactionTypeLabel,
   getTransactionTypeColor as getTransactionTypeColorUtil,
@@ -141,7 +141,7 @@ import {
   calculateBtcSum,
   reduceTransactionsBtc
 } from '~/utils/transaction'
-import { formatBTC } from '~/utils/format'
+import { formatNumber } from '~/utils/format'
 
 const logger = useLogger({ prefix: '[PAGE-TRANSACTIONS]' })
 const apiClient = useApiClient()
@@ -237,24 +237,38 @@ const pendingTransactionCount = computed(() => {
 })
 
 // Methods
+// バックエンドは1リクエストあたり最大100件のページネーションのため、
+// 「全件表示」を実現するにはhasMoreがfalseになるまでページを繰り返し取得する
 const loadTransactions = async () => {
   if (!user.value) return
 
   loading.value = true
   try {
     logger.debug('取引履歴を読み込み中...', { userId: user.value.user_id })
-    const response = await apiClient.get<{ items: Transaction[] }>(
-      `/transactions?user_id=${user.value.user_id}`
-    )
-    logger.debug('APIレスポンス:', response)
 
-    if (response.success && response.data && response.data.items) {
-      transactions.value = response.data.items
-      logger.info(`取引履歴を${response.data.items.length}件読み込みました`)
-    } else {
-      logger.warn('APIレスポンスが期待通りの形式ではありません:', response)
-      showError('取引履歴のデータ形式に問題があります')
+    const allItems: Transaction[] = []
+    let page = 1
+    let hasMore = true
+
+    while (hasMore) {
+      const response = await apiClient.get<PaginatedResponse<Transaction>>(
+        '/transactions',
+        { params: { page, limit: 100 } }
+      )
+
+      if (!response.success || !response.data) {
+        logger.warn('APIレスポンスが期待通りの形式ではありません:', response)
+        showError('取引履歴のデータ形式に問題があります')
+        break
+      }
+
+      allItems.push(...response.data.items)
+      hasMore = response.data.hasMore
+      page += 1
     }
+
+    transactions.value = allItems
+    logger.info(`取引履歴を${allItems.length}件読み込みました`)
   } catch (error: any) {
     logger.error('取引履歴の読み込みに失敗しました:', error)
 

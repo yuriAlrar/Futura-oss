@@ -3,7 +3,7 @@
     <div class="mb-6 flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-900 mb-2">ダッシュボード</h1>
-        <p class="text-gray-600">BTCポートフォリオの概要</p>
+        <p class="text-gray-600">資産の概要</p>
       </div>
       <v-btn variant="outlined" prepend-icon="mdi-refresh" :loading="loading" @click="loadDashboardData">
         更新
@@ -16,7 +16,7 @@
       <v-card class="card-shadow">
         <v-card-title class="px-6 py-4 border-b">
           <div class="flex items-center justify-between w-full">
-            <h3 class="text-lg font-semibold text-gray-900">BTC保有量推移（30日間）</h3>
+            <h3 class="text-lg font-semibold text-gray-900">資産推移（30日間）</h3>
             <div class="flex items-center space-x-2">
               <v-btn-toggle v-model="assetViewMode" variant="outlined" density="compact" mandatory>
                 <v-btn value="chart" size="small">
@@ -42,21 +42,21 @@
                 </p>
               </div>
               <div class="text-center">
-                <p class="text-xs text-gray-500 uppercase tracking-wider">最大保有量</p>
+                <p class="text-xs text-gray-500 uppercase tracking-wider">最大資産額</p>
                 <p class="text-lg font-bold text-gray-900">
-                  {{ formatBTC(maxBTCBalance) }} BTC
+                  ¥{{ formatNumber(maxAssetValue) }}
                 </p>
               </div>
               <div class="text-center">
-                <p class="text-xs text-gray-500 uppercase tracking-wider">最小保有量</p>
+                <p class="text-xs text-gray-500 uppercase tracking-wider">最小資産額</p>
                 <p class="text-lg font-bold text-gray-900">
-                  {{ formatBTC(minBTCBalance) }} BTC
+                  ¥{{ formatNumber(minAssetValue) }}
                 </p>
               </div>
               <div class="text-center">
-                <p class="text-xs text-gray-500 uppercase tracking-wider">平均保有量</p>
+                <p class="text-xs text-gray-500 uppercase tracking-wider">平均資産額</p>
                 <p class="text-lg font-bold text-gray-900">
-                  {{ formatBTC(avgBTCBalance) }} BTC
+                  ¥{{ formatNumber(avgAssetValue) }}
                 </p>
               </div>
             </div>
@@ -73,8 +73,8 @@
           <div v-else class="h-80 flex items-center justify-center bg-gray-50 rounded-lg">
             <div class="text-center">
               <Icon name="mdi:chart-line" class="text-4xl text-gray-400 mb-2" />
-              <p class="text-gray-500">BTC残高データがありません</p>
-              <p class="text-sm text-gray-400 mt-2">取引を開始するとBTC保有量推移が表示されます</p>
+              <p class="text-gray-500">資産データがありません</p>
+              <p class="text-sm text-gray-400 mt-2">取引を開始すると資産推移が表示されます</p>
             </div>
           </div>
         </v-card-text>
@@ -93,10 +93,6 @@
             <p class="text-2xl font-bold text-gray-900 font-mono">
               <Icon name="mdi:currency-jpy" class="text-xl text-gray-500 mr-1 align-middle" />
               {{ formatNumber(dashboardData?.currentValue || 0) }}
-            </p>
-            <p class="text-xl text-gray-900 font-mono">
-              <Icon name="mdi:bitcoin" class="text-xl text-gray-500 mr-1 align-middle" />
-              {{ formatBTC(dashboardData?.currentBalance || 0) }}
             </p>
           </div>
           <!-- Request Button -->
@@ -136,7 +132,7 @@
           </div>
           <div class="space-y-1">
             <p class="text-2xl font-bold text-blue-700 font-mono">
-              {{ formatBTC(dashboardData?.depositPrincipal || 0) }} BTC
+              ¥{{ formatNumber(dashboardData?.depositPrincipal || 0) }}
             </p>
             <p class="text-sm text-gray-500">承認済み入金の合計</p>
           </div>
@@ -152,7 +148,7 @@
           </div>
           <div class="space-y-1">
             <p class="text-2xl font-bold text-orange-700 font-mono">
-              {{ formatBTC(dashboardData?.withdrawalTotal || 0) }} BTC
+              ¥{{ formatNumber(dashboardData?.withdrawalTotal || 0) }}
             </p>
             <p class="text-sm text-gray-500">承認済み出金の合計</p>
           </div>
@@ -168,7 +164,7 @@
           </div>
           <div class="space-y-1">
             <p class="text-2xl font-bold text-purple-700 font-mono">
-              {{ formatBTC(dashboardData?.creditBonus || 0) }} BTC
+              ¥{{ formatNumber(dashboardData?.creditBonus || 0) }}
             </p>
             <p class="text-sm text-gray-500">ボーナスの合計</p>
           </div>
@@ -184,7 +180,7 @@
           </div>
           <div class="space-y-1">
             <p class="text-2xl font-bold font-mono" :class="netProfitClass">
-              {{ formatBTC(dashboardData?.netProfit || 0) }} BTC
+              ¥{{ formatNumber(dashboardData?.netProfit || 0) }}
             </p>
             <p class="text-sm text-gray-500">残高 - 元本 + 出金額</p>
           </div>
@@ -218,8 +214,8 @@
               </div>
               <div class="text-right">
                 <p class="font-mono font-semibold" :class="getTransactionTypeTextColor(transaction.transaction_type)">
-                  {{ getTransactionTypeSign(transaction.transaction_type, transaction.amount) }}{{
-                    formatBTC(Math.abs(transaction.amount)) }} BTC
+                  {{ getTransactionTypeSign(transaction.transaction_type, transaction.amount) }}¥{{
+                    formatNumber(Math.abs(transaction.amount)) }}
                 </p>
               </div>
             </div>
@@ -237,16 +233,15 @@
 </template>
 
 <script setup lang="ts">
-import type { DashboardData, MarketRate } from '~/types'
+import type { DashboardData } from '~/types'
 import {
   getTransactionTypeLabel,
   getTransactionTypeColor,
   getTransactionTypeIcon,
   getTransactionTypeTextColor,
-  getTransactionTypeSign,
-  calculateBtcSum
+  getTransactionTypeSign
 } from '~/utils/transaction'
-import { formatNumber, formatBTC } from '~/utils/format'
+import { formatNumber } from '~/utils/format'
 
 const logger = useLogger({ prefix: '[PAGE-DASHBOARD]' })
 
@@ -263,40 +258,10 @@ const apiClient = useApiClient()
 
 // State
 const dashboardData = ref<DashboardData | null>(null)
-const marketRates = ref<MarketRate[]>([])
 const loading = ref(false)
 const assetViewMode = ref<'chart' | 'table'>('chart')
 
 // Computed
-const currentRate = computed(() => {
-  if (!dashboardData.value?.balanceHistory.length) return 0
-  const latest = dashboardData.value.balanceHistory[dashboardData.value.balanceHistory.length - 1]
-  return latest.btc_rate
-})
-
-const valueChangeText = computed(() => {
-  if (!dashboardData.value?.balanceHistory.length || dashboardData.value.balanceHistory.length < 2) {
-    return '+0.00%'
-  }
-
-  const history = dashboardData.value.balanceHistory
-  const current = history[history.length - 1].btc_amount
-  const previous = history[history.length - 2].btc_amount
-
-  if (previous === 0) return '+0.00%'
-
-  const change = ((current - previous) / previous) * 100
-  const sign = change >= 0 ? '+' : ''
-  return `${sign}${change.toFixed(2)}%`
-})
-
-const valueChangeClass = computed(() => {
-  const text = valueChangeText.value
-  if (text.startsWith('+')) return 'text-green-600'
-  if (text.startsWith('-')) return 'text-red-600'
-  return 'text-gray-600'
-})
-
 const monthlyTransactionCount = computed(() => {
   if (!dashboardData.value?.recentTransactions.length) return 0
 
@@ -309,15 +274,15 @@ const monthlyTransactionCount = computed(() => {
   ).length
 })
 
-// Asset history statistics
+// Asset history statistics（円換算額=jpy_valueを基準にする）
 const period30ChangeText = computed(() => {
   if (!dashboardData.value?.balanceHistory.length || dashboardData.value.balanceHistory.length < 2) {
     return '+0.00%'
   }
 
   const history = dashboardData.value.balanceHistory
-  const current = history[history.length - 1].btc_amount
-  const initial = history[0].btc_amount
+  const current = history[history.length - 1].jpy_value
+  const initial = history[0].jpy_value
 
   if (initial === 0) return '+0.00%'
 
@@ -333,59 +298,21 @@ const period30ChangeClass = computed(() => {
   return 'text-gray-600'
 })
 
-const maxBTCBalance = computed(() => {
+const maxAssetValue = computed(() => {
   if (!dashboardData.value?.balanceHistory.length) return 0
-  return Math.max(...dashboardData.value.balanceHistory.map(item => item.btc_amount))
+  return Math.max(...dashboardData.value.balanceHistory.map(item => item.jpy_value))
 })
 
-const minBTCBalance = computed(() => {
+const minAssetValue = computed(() => {
   if (!dashboardData.value?.balanceHistory.length) return 0
-  return Math.min(...dashboardData.value.balanceHistory.map(item => item.btc_amount))
+  return Math.min(...dashboardData.value.balanceHistory.map(item => item.jpy_value))
 })
 
-const avgBTCBalance = computed(() => {
+const avgAssetValue = computed(() => {
   if (!dashboardData.value?.balanceHistory.length) return 0
-  const amounts = dashboardData.value.balanceHistory.map(item => item.btc_amount)
-  const sum = calculateBtcSum(amounts)
+  const values = dashboardData.value.balanceHistory.map(item => item.jpy_value)
+  const sum = values.reduce((acc, v) => acc + v, 0)
   return sum / dashboardData.value.balanceHistory.length
-})
-
-// Market rate statistics
-const rateChangeText = computed(() => {
-  if (marketRates.value.length < 2) return '+0.00%'
-
-  const sortedRates = [...marketRates.value].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-  const initial = sortedRates[0].btc_jpy_rate
-  const current = sortedRates[sortedRates.length - 1].btc_jpy_rate
-
-  if (initial === 0) return '+0.00%'
-
-  const change = ((current - initial) / initial) * 100
-  const sign = change >= 0 ? '+' : ''
-  return `${sign}${change.toFixed(2)}%`
-})
-
-const rateChangeClass = computed(() => {
-  const text = rateChangeText.value
-  if (text.startsWith('+')) return 'text-green-600'
-  if (text.startsWith('-')) return 'text-red-600'
-  return 'text-gray-600'
-})
-
-const maxRate = computed(() => {
-  if (!marketRates.value.length) return 0
-  return Math.max(...marketRates.value.map(rate => rate.btc_jpy_rate))
-})
-
-const minRate = computed(() => {
-  if (!marketRates.value.length) return 0
-  return Math.min(...marketRates.value.map(rate => rate.btc_jpy_rate))
-})
-
-const avgRate = computed(() => {
-  if (!marketRates.value.length) return 0
-  const sum = marketRates.value.reduce((acc, rate) => acc + rate.btc_jpy_rate, 0)
-  return Math.round(sum / marketRates.value.length)
 })
 
 // Net profit styling
@@ -407,12 +334,8 @@ const netProfitIconClass = computed(() => {
 const loadDashboardData = async () => {
   loading.value = true
   try {
-    const [dashboardResponse, ratesResponse] = await Promise.all([
-      apiClient.get<DashboardData>('/dashboard'),
-      apiClient.get<{ items: MarketRate[] }>('/market-rates', { params: { limit: 30 } })
-    ])
+    const dashboardResponse = await apiClient.get<DashboardData>('/dashboard')
     dashboardData.value = dashboardResponse.data!
-    marketRates.value = ratesResponse.data!.items || []
   } catch (error) {
     logger.error('ダッシュボードデータの読み込みに失敗しました:', error)
     showError('ダッシュボードデータの取得に失敗しました')

@@ -105,15 +105,20 @@ npm run dev
 1. AWSコンソールでAmplifyアプリを作成
 2. GitHubリポジトリを接続
 3. `amplify.yml`設定ファイルが自動認識される
-4. 環境変数を設定
-5. デプロイ実行
+4. **SSR Compute roleを割り当てる（必須・環境構築時に必ず実施）**
+   `server/api/**`はAmplify Hosting Compute上で動作し、DynamoDB/Cognitoへのアクセスにはこの専用IAMロールが必要（Terraformが作る`lambda_execution`ロールは未使用のプレースホルダーLambda用で別物）。割り当てないとログイン等が`Could not load credentials from any providers`エラーで失敗する。
+   - `terraform output amplify_ssr_compute_role_arn` の値を控える
+   - Amplifyコンソール →「App settings」→「IAM roles」→「Compute role」→ 上記ロールを選択して保存
+5. 環境変数を設定
+6. デプロイ実行
+
+詳細な手順・トラブルシューティングは[doc/guides/deployment_runbook.md](doc/guides/deployment_runbook.md)を参照。
 
 ### 環境変数（Amplify）
 ```
-AWS_REGION=ap-northeast-1
-COGNITO_USER_POOL_ID=<Terraform出力値>
-COGNITO_CLIENT_ID=<Terraform出力値>
-S3_BUCKET_NAME=<Terraform出力値>
+STAGE=dev  # dev / stg / prod（amplify.ymlが.env.{STAGE}を読み分ける）
+NUXT_PUBLIC_COGNITO_USER_POOL_ID=<Terraform出力値: cognito_user_pool_id>
+NUXT_PUBLIC_COGNITO_CLIENT_ID=<Terraform出力値: cognito_user_pool_client_id>
 ```
 
 ## テスト

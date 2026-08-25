@@ -47,6 +47,12 @@
   @apply animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500;
 }
 
+/* Vuetifyのテーブル（v-data-table/v-table）のヘッダーは折り返さず、
+   画面からはみ出す場合はラッパー(.v-table__wrapper)の横スクロールで表示する */
+.v-table > .v-table__wrapper > table > thead > tr > th {
+  white-space: nowrap;
+}
+
 /* Card shadow utilities */
 .card-shadow {
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);

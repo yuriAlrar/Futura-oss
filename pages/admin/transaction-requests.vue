@@ -75,7 +75,7 @@
 
         <template #[`item.amount`]="{ item }">
           <div class="text-sm font-mono text-gray-900">
-            {{ formatBTC(item.amount) }} BTC
+            ¥{{ formatNumber(Math.abs(item.amount)) }}
           </div>
         </template>
 
@@ -125,7 +125,7 @@ import { ref, computed, onMounted } from 'vue'
 import type { PaginatedResponse } from '~/types'
 import { TRANSACTION_STATUS } from '~/types'
 import { getTransactionTypeLabel } from '~/utils/transaction'
-import { formatBTC } from '~/utils/format'
+import { formatNumber } from '~/utils/format'
 
 const logger = useLogger({ prefix: '[ADMIN-TRANSACTION-REQUESTS]' })
 const apiClient = useApiClient()

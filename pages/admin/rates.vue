@@ -2,18 +2,10 @@
   <div class="p-6">
     <div class="mb-6 flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900 mb-2">BTC相場価格設定</h1>
-        <p class="text-gray-600">BTCの相場価格を設定して全ユーザーの資産価値を更新します</p>
+        <h1 class="text-2xl font-bold text-gray-900 mb-2">相場価格設定</h1>
+        <p class="text-gray-600">内部レート（資産評価に使用する円換算レート）の設定・変更を行います</p>
       </div>
       <div class="flex gap-3">
-        <v-btn
-          color="secondary"
-          variant="outlined"
-          prepend-icon="mdi-upload"
-          @click="showCSVUploadDialog = true"
-        >
-          CSV一括アップロード
-        </v-btn>
         <v-btn
           color="primary"
           prepend-icon="mdi-plus"
@@ -129,12 +121,7 @@
         </template>
 
         <template #[`item.actions`]="{ item }">
-          <v-btn
-            size="small"
-            variant="text"
-            color="primary"
-            @click="openEditDialog(item)"
-          >
+          <v-btn size="small" variant="text" color="primary" @click="openEditDialog(item)">
             <Icon name="mdi:pencil" />
             編集
           </v-btn>
@@ -142,29 +129,23 @@
       </v-data-table>
     </v-card>
 
-    <!-- Create Rate Dialog -->
+    <!-- Create Market Rate Dialog -->
     <AdminCreateMarketRateDialog
       v-model="showCreateDialog"
-      @created="handleRateCreated"
+      @created="loadRates"
     />
 
-    <!-- Edit Rate Dialog -->
+    <!-- Edit Market Rate Dialog -->
     <AdminEditMarketRateDialog
       v-model="showEditDialog"
       :market-rate="selectedRate"
-      @updated="handleRateUpdated"
-    />
-
-    <!-- CSV Upload Dialog -->
-    <AdminCSVUploadDialog
-      v-model="showCSVUploadDialog"
-      @uploaded="handleCSVUploaded"
+      @updated="loadRates"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import type { MarketRate, CSVUploadResponse } from '~/types'
+import type { MarketRate } from '~/types'
 
 definePageMeta({
   middleware: 'auth',
@@ -177,7 +158,7 @@ useHead({
 })
 
 const logger = useLogger({ prefix: '[AdminRates]' })
-const { showSuccess: _showSuccess, showError } = useNotification()
+const { showError } = useNotification()
 const apiClient = useApiClient()
 
 // State
@@ -186,13 +167,12 @@ const latestRate = ref<MarketRate | null>(null)
 const loading = ref(false)
 const showCreateDialog = ref(false)
 const showEditDialog = ref(false)
-const showCSVUploadDialog = ref(false)
 const selectedRate = ref<MarketRate | null>(null)
 
 // Table headers
 const headers = [
   { title: '設定日時', key: 'timestamp', sortable: true },
-  { title: 'BTC価格', key: 'btc_jpy_rate', sortable: true },
+  { title: '内部レート（円）', key: 'btc_jpy_rate', sortable: true },
   { title: '前回からの変動', key: 'change', sortable: false },
   { title: '作成日時', key: 'created_at', sortable: true },
   { title: 'アクション', key: 'actions', sortable: false, width: 120 }
@@ -241,11 +221,13 @@ const loadRates = async () => {
       apiClient.get<MarketRate>('/market-rates/latest')
     ])
 
-    console.log('ratesResponse', ratesResponse)
-    console.log('latestResponse', latestResponse)
+    if (!ratesResponse.success) {
+      showError(ratesResponse.error || '相場データの取得に失敗しました')
+      return
+    }
 
     rates.value = ratesResponse.data!.items
-    latestRate.value = latestResponse.data || null
+    latestRate.value = latestResponse.success ? (latestResponse.data || null) : null
   } catch (error) {
     logger.error('相場データの読み込みに失敗しました:', error)
     showError('相場データの取得に失敗しました')
@@ -254,25 +236,9 @@ const loadRates = async () => {
   }
 }
 
-const handleRateCreated = () => {
-  showCreateDialog.value = false
-  loadRates()
-}
-
 const openEditDialog = (rate: MarketRate) => {
   selectedRate.value = rate
   showEditDialog.value = true
-}
-
-const handleRateUpdated = () => {
-  showEditDialog.value = false
-  selectedRate.value = null
-  loadRates()
-}
-
-const handleCSVUploaded = () => {
-  showCSVUploadDialog.value = false
-  loadRates()
 }
 
 // Utility functions

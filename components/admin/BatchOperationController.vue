@@ -1,7 +1,7 @@
 <template>
   <v-card>
     <v-card-title class="bg-primary text-white">
-      BTC一括調整コントローラー
+      一括資産調整コントローラー
     </v-card-title>
 
     <v-card-text class="pa-6">
@@ -18,6 +18,26 @@
       <v-form @submit.prevent="openConfirmDialog">
         <v-row>
           <v-col cols="12" md="6">
+            <v-select
+              v-model="targetSegmentId"
+              :items="segmentOptions"
+              label="対象セグメント"
+              variant="outlined"
+              hint="未選択の場合は全アクティブユーザーが対象になります"
+              persistent-hint
+              clearable
+            />
+            <div
+              v-if="targetSegmentId"
+              class="d-flex align-center mt-2 pa-3 rounded"
+              style="background-color: rgba(var(--v-theme-primary), 0.08); border: 1px solid rgba(var(--v-theme-primary), 0.3);"
+            >
+              <Icon name="mdi:information-outline" class="text-primary mr-2 flex-shrink-0" />
+              <span class="text-body-2">{{ selectedSegmentDescription || '説明が設定されていません' }}</span>
+            </div>
+          </v-col>
+
+          <v-col cols="12" md="6">
             <v-text-field
               v-model.number="adjustmentRate"
               label="増減率 (%)"
@@ -30,8 +50,10 @@
               required
             />
           </v-col>
+        </v-row>
 
-          <v-col cols="12" md="6">
+        <v-row>
+          <v-col cols="12">
             <v-text-field
               v-model="memo"
               label="メモ (任意)"
@@ -48,7 +70,7 @@
               <div class="font-weight-bold">実行内容</div>
               <div>{{ impactDescription }}</div>
               <div class="text-caption mt-2">
-                ※ アクティブな全ユーザーが対象です
+                {{ targetDescription }}
               </div>
             </v-alert>
           </v-col>
@@ -80,12 +102,19 @@
 
         <v-card-text class="pa-6">
           <v-alert type="warning" variant="tonal" class="mb-4">
-            この操作は全ユーザーに影響します
+            {{ targetDescription }}
           </v-alert>
 
           <div class="mb-4">
             <div class="text-h6 mb-2">実行内容</div>
             <v-list density="compact">
+              <v-list-item>
+                <v-list-item-title>対象</v-list-item-title>
+                <v-list-item-subtitle>{{ selectedSegmentName || '全アクティブユーザー' }}</v-list-item-subtitle>
+              </v-list-item>
+              <v-list-item v-if="targetSegmentId">
+                <v-list-item-subtitle>{{ selectedSegmentDescription || '説明が設定されていません' }}</v-list-item-subtitle>
+              </v-list-item>
               <v-list-item>
                 <v-list-item-title>増減率</v-list-item-title>
                 <v-list-item-subtitle class="text-h6">
@@ -132,13 +161,14 @@
 </template>
 
 <script setup lang="ts">
-import type { BatchOperationCreateForm, BatchOperationResult } from '~/types'
+import type { BatchOperationCreateForm, BatchOperationResult, SegmentWithMemberCount } from '~/types'
 
 const emit = defineEmits<{
   success: []
 }>()
 
 const apiClient = useApiClient()
+const logger = useLogger({ prefix: '[BatchOperationController]' })
 
 // State
 const adjustmentRate = ref<number>(0)
@@ -146,6 +176,30 @@ const memo = ref<string>('')
 const loading = ref(false)
 const showConfirmDialog = ref(false)
 const errorMessage = ref<string>('')
+const segments = ref<SegmentWithMemberCount[]>([])
+const targetSegmentId = ref<string | null>(null)
+
+// Segment options for target selector
+const segmentOptions = computed(() =>
+  segments.value.map(segment => ({
+    title: `${segment.name}（${segment.member_count}人）`,
+    value: segment.segment_id
+  }))
+)
+
+const selectedSegmentName = computed(() => {
+  return segments.value.find(s => s.segment_id === targetSegmentId.value)?.name || ''
+})
+
+const selectedSegmentDescription = computed(() => {
+  return segments.value.find(s => s.segment_id === targetSegmentId.value)?.description || ''
+})
+
+const targetDescription = computed(() => {
+  return targetSegmentId.value
+    ? `※ セグメント「${selectedSegmentName.value}」に所属するアクティブユーザーが対象です`
+    : '※ アクティブな全ユーザーが対象です'
+})
 
 // Validation
 const isValid = computed(() => {
@@ -156,6 +210,29 @@ const adjustmentRateRules = [
   (v: number) => v !== 0 || '増減率を入力してください',
   (v: number) => v > -100 || '増減率は-100%より大きい値を入力してください'
 ]
+
+// Load segments for the target selector
+const loadSegments = async () => {
+  try {
+    const response = await apiClient.get<{ items: SegmentWithMemberCount[] }>('/admin/segments')
+
+    if (!response.success) {
+      errorMessage.value = response.statusCode === 403
+        ? 'セグメント一覧を閲覧する権限がないため、対象セグメントを選択できません（全アクティブユーザーのみ対象にできます）'
+        : (response.error || 'セグメント一覧の取得に失敗しました')
+      return
+    }
+
+    segments.value = response.data?.items || []
+  } catch (error) {
+    logger.error('セグメント一覧の取得に失敗しました:', error)
+    errorMessage.value = 'セグメント一覧の取得に失敗しました'
+  }
+}
+
+onMounted(() => {
+  loadSegments()
+})
 
 // Confirm dialog
 function openConfirmDialog() {
@@ -178,7 +255,8 @@ async function executeBatchOperation() {
   try {
     const payload: BatchOperationCreateForm = {
       adjustment_rate: adjustmentRate.value,
-      memo: memo.value || undefined
+      memo: memo.value || undefined,
+      target_segment_id: targetSegmentId.value || undefined
     }
 
     const response = await apiClient.post<BatchOperationResult>(
@@ -186,20 +264,26 @@ async function executeBatchOperation() {
       payload
     )
 
-    if (response.success) {
-      showConfirmDialog.value = false
-      adjustmentRate.value = 0
-      memo.value = ''
-      emit('success')
-
-      // Show success message
-      const result = response.data! as BatchOperationResult
-      const successMsg = `一括処理が完了しました。成功: ${result.processed_user_count}件, 失敗: ${result.failed_user_count}件`
-      console.log(successMsg)
+    if (!response.success) {
+      errorMessage.value = response.statusCode === 403
+        ? '一括資産調整を実行する権限がありません'
+        : (response.error || '一括処理の実行に失敗しました')
+      return
     }
+
+    showConfirmDialog.value = false
+    adjustmentRate.value = 0
+    memo.value = ''
+    targetSegmentId.value = null
+    emit('success')
+
+    // Show success message
+    const result = response.data! as BatchOperationResult
+    const successMsg = `一括処理が完了しました。成功: ${result.processed_user_count}件, 失敗: ${result.failed_user_count}件`
+    logger.info(successMsg)
   } catch (error: any) {
-    console.error('一括処理実行エラー:', error)
-    errorMessage.value = error.data?.statusMessage || error.message || '一括処理の実行に失敗しました'
+    logger.error('一括処理実行エラー:', error)
+    errorMessage.value = '一括処理の実行に失敗しました'
   } finally {
     loading.value = false
   }
@@ -212,10 +296,11 @@ const rateDisplay = computed(() => {
 })
 
 const impactDescription = computed(() => {
+  const targetLabel = targetSegmentId.value ? `セグメント「${selectedSegmentName.value}」の` : '全ユーザーの'
   if (adjustmentRate.value === 0) return ''
   if (adjustmentRate.value > 0) {
-    return `全ユーザーのBTC残高が${adjustmentRate.value}%増加します`
+    return `${targetLabel}資産残高が${adjustmentRate.value}%増加します`
   }
-  return `全ユーザーのBTC残高が${Math.abs(adjustmentRate.value)}%減少します`
+  return `${targetLabel}資産残高が${Math.abs(adjustmentRate.value)}%減少します`
 })
 </script>

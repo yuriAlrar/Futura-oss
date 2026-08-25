@@ -52,6 +52,10 @@
                 <div class="text-caption text-medium-emphasis">実行者</div>
                 <div class="text-body-2">{{ operation.created_by }}</div>
               </v-col>
+              <v-col cols="12" md="6">
+                <div class="text-caption text-medium-emphasis">対象</div>
+                <div class="text-body-2">{{ operation.target_segment_id ? `セグメント: ${operation.target_segment_id}` : '全アクティブユーザー' }}</div>
+              </v-col>
               <v-col v-if="operation.memo" cols="12">
                 <div class="text-caption text-medium-emphasis">メモ</div>
                 <div class="text-body-2">{{ operation.memo }}</div>
@@ -142,7 +146,7 @@
               </template>
 
               <template #item.amount="{ item }">
-                <span class="font-weight-medium">{{ item.amount }} BTC</span>
+                <span class="font-weight-medium">¥{{ formatNumber(item.amount) }}</span>
               </template>
 
               <template #item.transaction_type="{ item }">
@@ -183,6 +187,7 @@
 import type { BatchOperation, Transaction } from '~/types'
 import { BATCH_OPERATION_STATUS } from '~/types'
 import { getTransactionTypeLabel, getTransactionTypeColor } from '~/utils/transaction'
+import { formatNumber } from '~/utils/format'
 
 const props = defineProps<{
   modelValue: boolean

@@ -26,13 +26,13 @@
 
             <v-text-field
               v-model="formattedRate"
-              label="BTC価格（円） *"
+              label="内部レート（円） *"
               type="text"
               variant="outlined"
               :rules="rateRules"
               prefix="¥"
               suffix="JPY"
-              hint="1 BTCの日本円価格を入力してください（小数点2桁まで、カンマ自動挿入）"
+              hint="1単位あたりの内部レート（円）を入力してください（小数点2桁まで、カンマ自動挿入）"
               persistent-hint
               required
               @blur="formatOnBlur"
@@ -40,7 +40,7 @@
 
             <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
               <h4 class="font-medium text-blue-800 mb-2 flex items-center">
-                <Icon name="mdi-calculator" class="mr-2" />
+                <Icon name="mdi:calculator" class="mr-2" />
                 価格例（参考値）
               </h4>
               <div class="grid grid-cols-2 gap-4 text-sm text-blue-700">
@@ -104,7 +104,6 @@ import type { MarketRateCreateForm } from '~/types'
 
 const apiClient = useApiClient()
 
-// Props & Emits
 const props = defineProps<{
   modelValue: boolean
 }>()
@@ -117,7 +116,6 @@ const emit = defineEmits<{
 const logger = useLogger({ prefix: '[CreateMarketRateDialog]' })
 const { showSuccess, showError } = useNotification()
 
-// State
 const formRef = ref()
 const loading = ref(false)
 
@@ -126,20 +124,15 @@ const form = reactive<MarketRateCreateForm>({
   btc_jpy_rate: 0
 })
 
-// Formatted rate for display (with commas for readability)
+// カンマ区切り表示用（form側は素の数値を保持する）
 const formattedRate = ref('')
 
-// Watch for input changes and update form value
 watch(formattedRate, (newValue) => {
-  // Remove commas and validate
   const cleanValue = newValue.replace(/,/g, '')
   const numValue = parseFloat(cleanValue)
-  
-  // Update the form value (clean number)
   form.btc_jpy_rate = isNaN(numValue) ? 0 : numValue
 }, { immediate: true })
 
-// Format number with commas on blur
 const formatOnBlur = () => {
   if (form.btc_jpy_rate && !isNaN(form.btc_jpy_rate)) {
     formattedRate.value = form.btc_jpy_rate.toLocaleString('ja-JP', {
@@ -149,7 +142,6 @@ const formatOnBlur = () => {
   }
 }
 
-// Validation rules
 const timestampRules = [
   (v: string) => !!v || '設定日時は必須です',
   (v: string) => {
@@ -159,18 +151,18 @@ const timestampRules = [
 ]
 
 const rateRules = [
-  (v: string) => !!v || 'BTC価格は必須です',
+  (v: string) => !!v || '内部レートは必須です',
   (v: string) => {
     const numValue = parseFloat(v.replace(/,/g, ''))
     return !isNaN(numValue) || '有効な数値を入力してください'
   },
   (v: string) => {
     const numValue = parseFloat(v.replace(/,/g, ''))
-    return numValue > 0 || 'BTC価格は正の数値で入力してください'
+    return numValue > 0 || '内部レートは正の数値で入力してください'
   },
   (v: string) => {
     const numValue = parseFloat(v.replace(/,/g, ''))
-    return numValue <= 100000000 || 'BTC価格が高すぎます'
+    return numValue <= 100000000 || '内部レートが高すぎます'
   },
   (v: string) => {
     const cleanValue = v.replace(/,/g, '')
@@ -179,7 +171,6 @@ const rateRules = [
   }
 ]
 
-// Methods
 const createRate = async () => {
   const { valid } = await formRef.value.validate()
   if (!valid) return
@@ -189,13 +180,19 @@ const createRate = async () => {
   }
 
   loading.value = true
-  
+
   try {
-    await apiClient.post('/admin/market-rates', form)
+    const response = await apiClient.post('/admin/market-rates', form)
+
+    if (!response.success) {
+      showError(response.statusCode === 403 ? '相場価格を設定する権限がありません' : (response.error || '相場価格の設定に失敗しました'))
+      return
+    }
 
     showSuccess('相場価格を設定し、全ユーザーの資産価値を更新しました')
     resetForm()
     emit('created')
+    emit('update:modelValue', false)
   } catch (error) {
     logger.error('相場価格の作成に失敗しました:', error)
     showError('相場価格の設定に失敗しました')
@@ -224,22 +221,18 @@ const setExampleRate = (rate: number) => {
   })
 }
 
-// Set current datetime when dialog opens
+// ダイアログを開いたときに現在日時を初期値として設定する
 watch(() => props.modelValue, (newValue) => {
   if (newValue && !form.timestamp) {
     const now = new Date()
-    // Format for datetime-local input
     const year = now.getFullYear()
     const month = String(now.getMonth() + 1).padStart(2, '0')
     const day = String(now.getDate()).padStart(2, '0')
-    const hours = String(now.getHours()).padStart(2, '0')
-    const minutes = String(now.getMinutes()).padStart(2, '0')
-    
+
     form.timestamp = `${year}-${month}-${day}T00:00:00`
   }
 })
 
-// Reset form when dialog closes
 watch(() => props.modelValue, (newValue) => {
   if (!newValue) {
     resetForm()

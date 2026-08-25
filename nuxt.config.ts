@@ -102,6 +102,9 @@ export default defineNuxtConfig({
     dynamodbSessionsTable: process.env.NUXT_DYNAMODB_SESSIONS_TABLE || 'futura-dev-sessions',
     dynamodbPermissionsTable: process.env.NUXT_DYNAMODB_PERMISSIONS_TABLE || 'futura-dev-permissions',
     dynamodbBatchOperationsTable: process.env.NUXT_DYNAMODB_BATCH_OPERATIONS_TABLE || 'futura-dev-batch-operations',
+    dynamodbSegmentsTable: process.env.NUXT_DYNAMODB_SEGMENTS_TABLE || 'futura-dev-segments',
+    dynamodbUserSegmentsTable: process.env.NUXT_DYNAMODB_USER_SEGMENTS_TABLE || 'futura-dev-user-segments',
+    dynamodbInvitesTable: process.env.NUXT_DYNAMODB_INVITES_TABLE || 'futura-dev-invites',
     s3UploadsBucket: process.env.NUXT_S3_UPLOADS_BUCKET || 'futura-dev-uploads',
     imageBaseUrl: process.env.NUXT_IMAGE_BASE_URL || '', // 画像URLのベースURL（CodeBuild環境変数から設定、バケット名とは異なる場合がある）
     cognitoUserPoolId: process.env.NUXT_PUBLIC_COGNITO_USER_POOL_ID || '',
@@ -120,22 +123,32 @@ export default defineNuxtConfig({
   // App configuration
   app: {
     head: {
-      title: 'Futura',
+      title: 'M・S CFD App',
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-        { name: 'description', content: 'Futura' }
+        { name: 'description', content: 'M・S CFD Application' },
+        { name: 'apple-mobile-web-app-title', content: 'M・S CFD' },
+        { name: 'apple-mobile-web-app-capable', content: 'yes' },
+        { name: 'theme-color', content: '#163a5c' }
       ],
       link: [
         { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
+        { rel: 'icon', type: 'image/png', sizes: '192x192', href: '/icon-192.png' },
+        { rel: 'icon', type: 'image/png', sizes: '512x512', href: '/icon-512.png' },
+        { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
+        { rel: 'manifest', href: '/manifest.json' },
         { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/npm/@mdi/font@latest/css/materialdesignicons.min.css' }
       ]
     }
   },
 
-  // Nitro configuration for Lambda deployment
+  // Nitro configuration for AWS Amplify Hosting (compute + static hosting)
+  // 'aws-lambda' preset is for direct API Gateway/ALB Lambda integration and is NOT
+  // compatible with Amplify Hosting's SSR deployment specification — Amplify auto-detects
+  // Nuxt apps and expects the .amplify-hosting/{static,compute,deploy-manifest.json}
+  // structure that only the 'aws-amplify' preset produces.
   nitro: {
-    preset: 'aws-lambda',
-    serveStatic: true
+    preset: 'aws-amplify'
   }
 })

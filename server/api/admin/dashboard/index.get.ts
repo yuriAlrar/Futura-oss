@@ -131,7 +131,7 @@ export default defineEventHandler(async (event) => {
         recentActivities.push({
           id: `transaction_${transaction.transaction_id}`,
           type: 'transaction',
-          message: `${user?.name || 'Unknown User'}さんの${transaction.transaction_type === 'deposit' ? '入金' : '出金'}（${transaction.amount.toFixed(8)} BTC）が承認されました`,
+          message: `${user?.name || 'Unknown User'}さんの${transaction.transaction_type === 'deposit' ? '入金' : '出金'}（¥${Math.round(Math.abs(transaction.amount)).toLocaleString('ja-JP')}）が承認されました`,
           timestamp: transaction.processed_at || transaction.timestamp,
           user_name: user?.name,
           user_email: user?.email

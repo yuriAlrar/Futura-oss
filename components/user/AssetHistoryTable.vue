@@ -17,19 +17,13 @@
       <table class="w-full">
         <thead class="bg-gray-50">
           <tr>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
               日付
             </th>
-            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-              BTC残高
+            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+              資産価値(円)
             </th>
-            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-              BTC価格
-            </th>
-            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-              資産価値(JPY)
-            </th>
-            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
               前日比較
             </th>
           </tr>
@@ -41,12 +35,6 @@
                 <div class="font-medium">{{ formatDate(item.date) }}</div>
                 <div class="text-xs text-gray-500">{{ formatDayOfWeek(item.date) }}</div>
               </div>
-            </td>
-            <td class="px-4 py-3 text-sm text-gray-900 text-right font-mono">
-              {{ formatBTC(item.btc_amount) }} BTC
-            </td>
-            <td class="px-4 py-3 text-sm text-gray-900 text-right">
-              ¥{{ formatNumber(item.btc_rate) }}
             </td>
             <td class="px-4 py-3 text-sm text-gray-900 text-right font-semibold">
               ¥{{ formatNumber(item.jpy_value) }}
@@ -93,7 +81,7 @@
 
 <script setup lang="ts">
 import type { BalanceHistoryItem } from '~/types'
-import { formatNumber, formatBTC } from '~/utils/format'
+import { formatNumber } from '~/utils/format'
 
 interface Props {
   data: BalanceHistoryItem[]
@@ -183,7 +171,7 @@ const getChangeIcon = (current: BalanceHistoryItem, previous: BalanceHistoryItem
 }
 
 const exportToCSV = () => {
-  const headers = ['日付', 'BTC残高', 'BTC価格', '資産価値(JPY)', '前日比(%)', '曜日']
+  const headers = ['日付', '資産価値(円)', '前日比(%)', '曜日']
   // Sort data by date descending for CSV export to match table display
   const sortedData = [...props.data].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
@@ -208,8 +196,6 @@ const exportToCSV = () => {
 
     return [
       formatDate(item.date),
-      formatBTC(item.btc_amount),
-      item.btc_rate.toString(),
       item.jpy_value.toString(),
       change,
       formatDayOfWeek(item.date)

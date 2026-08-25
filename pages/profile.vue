@@ -184,10 +184,76 @@
       </div>
     </div>
 
+    <!-- Parent Account (サブアカウントの場合のみ表示。サブアカウントからさらにサブアカウントは作成できない) -->
+    <div v-if="profile?.parent_user_id" class="mt-6">
+      <v-card class="card-shadow">
+        <v-card-title class="px-6 py-4 border-b">
+          <h3 class="text-lg font-semibold text-gray-900">親アカウント</h3>
+        </v-card-title>
+        <v-card-text class="p-6">
+          <div v-if="loadingParentAccount" class="text-center py-6">
+            <v-progress-circular indeterminate color="primary" />
+          </div>
+          <div v-else-if="!parentAccount" class="text-center py-6 text-gray-500">
+            親アカウント情報を取得できませんでした
+          </div>
+          <div v-else class="flex items-center justify-between p-3 border rounded-lg">
+            <div>
+              <p class="font-medium text-gray-900">{{ parentAccount.name }}</p>
+              <p class="text-sm text-gray-500">{{ parentAccount.email }}</p>
+            </div>
+          </div>
+        </v-card-text>
+      </v-card>
+    </div>
+
+    <!-- Sub-Accounts (本アカウントのみ表示) -->
+    <div v-else class="mt-6">
+      <v-card class="card-shadow">
+        <v-card-title class="px-6 py-4 border-b flex items-center justify-between">
+          <h3 class="text-lg font-semibold text-gray-900">サブアカウント</h3>
+          <v-btn color="primary" size="small" prepend-icon="mdi-account-plus" @click="showSubAccountDialog = true">
+            新規サブアカウント作成
+          </v-btn>
+        </v-card-title>
+        <v-card-text class="p-6">
+          <div v-if="loadingSubAccounts" class="text-center py-6">
+            <v-progress-circular indeterminate color="primary" />
+          </div>
+          <div v-else-if="subAccounts.length === 0" class="text-center py-6 text-gray-500">
+            サブアカウントはまだありません
+          </div>
+          <div v-else class="space-y-3">
+            <div v-for="sub in subAccounts" :key="sub.user_id"
+              class="flex items-center justify-between p-3 border rounded-lg">
+              <div>
+                <p class="font-medium text-gray-900">{{ sub.name }}</p>
+                <p class="text-sm text-gray-500">{{ sub.email }}</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <v-chip :color="sub.profile_approved ? 'success' : 'warning'" size="small" variant="flat">
+                  {{ sub.profile_approved ? '承認済み' : '承認待ち' }}
+                </v-chip>
+                <v-chip :color="getStatusColor(sub.status)" size="small" variant="flat">
+                  {{ getStatusText(sub.status) }}
+                </v-chip>
+              </div>
+            </div>
+          </div>
+        </v-card-text>
+      </v-card>
+    </div>
+
     <!-- Image Viewer Dialog -->
     <UserImageViewerDialog
       v-model="showImageDialog"
       :image-url="profile?.profile_image_url || ''"
+    />
+
+    <!-- Sub-Account Create Dialog -->
+    <UserSubAccountCreateDialog
+      v-model="showSubAccountDialog"
+      @created="loadSubAccounts"
     />
   </div>
 </template>
@@ -213,6 +279,11 @@ const profile = ref<User | null>(null)
 const loading = ref(false)
 const uploadLoading = ref(false)
 const showImageDialog = ref(false)
+const showSubAccountDialog = ref(false)
+const subAccounts = ref<User[]>([])
+const loadingSubAccounts = ref(false)
+const parentAccount = ref<{ user_id: string, name: string, email: string } | null>(null)
+const loadingParentAccount = ref(false)
 const formRef = ref()
 const fileInput = ref<HTMLInputElement>()
 
@@ -402,8 +473,39 @@ const formatDate = (dateString?: string) => {
   })
 }
 
+const loadSubAccounts = async () => {
+  loadingSubAccounts.value = true
+  try {
+    const response = await apiClient.get<{ items: User[] }>('/account/sub-accounts')
+    subAccounts.value = response.data?.items || []
+  } catch (error: unknown) {
+    logger.error('サブアカウント一覧の読み込みに失敗しました:', error)
+  } finally {
+    loadingSubAccounts.value = false
+  }
+}
+
+const loadParentAccount = async () => {
+  loadingParentAccount.value = true
+  try {
+    const response = await apiClient.get<{ user_id: string, name: string, email: string } | null>('/account/parent')
+    parentAccount.value = response.success ? (response.data ?? null) : null
+  } catch (error: unknown) {
+    logger.error('親アカウント情報の読み込みに失敗しました:', error)
+    parentAccount.value = null
+  } finally {
+    loadingParentAccount.value = false
+  }
+}
+
 // Load profile on mount
-onMounted(() => {
-  loadProfile()
+onMounted(async () => {
+  await loadProfile()
+
+  if (profile.value?.parent_user_id) {
+    loadParentAccount()
+  } else {
+    loadSubAccounts()
+  }
 })
 </script>

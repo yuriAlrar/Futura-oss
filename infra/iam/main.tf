@@ -193,3 +193,47 @@ resource "aws_iam_role_policy_attachment" "lambda_cloudwatch_logs" {
   policy_arn = aws_iam_policy.cloudwatch_logs.arn
   role       = aws_iam_role.lambda_execution.name
 }
+
+# Amplify Hosting SSR Compute role
+#
+# server/api/**（Nitroの'aws-amplify'プリセットで動くAPIルート）は、この
+# ロールを通じてDynamoDB/Cognitoにアクセスする。lambda_executionロールは
+# 未使用のプレースホルダーLambda用のため、Amplify Hostingの実行環境には
+# 適用されない。作成後、Amplifyコンソール（App settings > IAM roles >
+# Compute role）でこのロールのARNをアプリに手動で紐付ける必要がある
+# （Amplify AppはTerraform管理外のため）。
+resource "aws_iam_role" "amplify_ssr_compute" {
+  name = "${var.project_name}-${var.environment}-amplify-ssr-compute-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "amplify.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-amplify-ssr-compute-role"
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "amplify_ssr_compute_dynamodb_access" {
+  policy_arn = aws_iam_policy.dynamodb_access.arn
+  role       = aws_iam_role.amplify_ssr_compute.name
+}
+
+resource "aws_iam_role_policy_attachment" "amplify_ssr_compute_s3_access" {
+  policy_arn = aws_iam_policy.s3_access.arn
+  role       = aws_iam_role.amplify_ssr_compute.name
+}
+
+resource "aws_iam_role_policy_attachment" "amplify_ssr_compute_cognito_access" {
+  policy_arn = aws_iam_policy.cognito_access.arn
+  role       = aws_iam_role.amplify_ssr_compute.name
+}

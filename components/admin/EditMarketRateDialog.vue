@@ -26,13 +26,13 @@
 
             <v-text-field
               v-model="formattedRate"
-              label="BTC価格（円） *"
+              label="内部レート（円） *"
               type="text"
               variant="outlined"
               :rules="rateRules"
               prefix="¥"
               suffix="JPY"
-              hint="1 BTCの日本円価格を入力してください（小数点2桁まで、カンマ自動挿入）"
+              hint="1単位あたりの内部レート（円）を入力してください（小数点2桁まで、カンマ自動挿入）"
               persistent-hint
               required
               @blur="formatOnBlur"
@@ -104,7 +104,6 @@ import type { MarketRate, MarketRateUpdateForm } from '~/types'
 
 const apiClient = useApiClient()
 
-// Props & Emits
 const props = defineProps<{
   modelValue: boolean
   marketRate: MarketRate | null
@@ -118,7 +117,6 @@ const emit = defineEmits<{
 const logger = useLogger({ prefix: '[EditMarketRateDialog]' })
 const { showSuccess, showError } = useNotification()
 
-// State
 const formRef = ref()
 const loading = ref(false)
 
@@ -127,20 +125,15 @@ const form = reactive<MarketRateUpdateForm>({
   btc_jpy_rate: 0
 })
 
-// Formatted rate for display (with commas for readability)
+// カンマ区切り表示用（form側は素の数値を保持する）
 const formattedRate = ref('')
 
-// Watch for input changes and update form value
 watch(formattedRate, (newValue) => {
-  // Remove commas and validate
   const cleanValue = newValue.replace(/,/g, '')
   const numValue = parseFloat(cleanValue)
-  
-  // Update the form value (clean number)
   form.btc_jpy_rate = isNaN(numValue) ? 0 : numValue
 }, { immediate: true })
 
-// Format number with commas on blur
 const formatOnBlur = () => {
   if (form.btc_jpy_rate && !isNaN(form.btc_jpy_rate)) {
     formattedRate.value = form.btc_jpy_rate.toLocaleString('ja-JP', {
@@ -150,7 +143,6 @@ const formatOnBlur = () => {
   }
 }
 
-// Validation rules
 const timestampRules = [
   (v: string) => !!v || '設定日時は必須です',
   (v: string) => {
@@ -160,18 +152,18 @@ const timestampRules = [
 ]
 
 const rateRules = [
-  (v: string) => !!v || 'BTC価格は必須です',
+  (v: string) => !!v || '内部レートは必須です',
   (v: string) => {
     const numValue = parseFloat(v.replace(/,/g, ''))
     return !isNaN(numValue) || '有効な数値を入力してください'
   },
   (v: string) => {
     const numValue = parseFloat(v.replace(/,/g, ''))
-    return numValue > 0 || 'BTC価格は正の数値で入力してください'
+    return numValue > 0 || '内部レートは正の数値で入力してください'
   },
   (v: string) => {
     const numValue = parseFloat(v.replace(/,/g, ''))
-    return numValue <= 100000000 || 'BTC価格が高すぎます'
+    return numValue <= 100000000 || '内部レートが高すぎます'
   },
   (v: string) => {
     const cleanValue = v.replace(/,/g, '')
@@ -180,7 +172,6 @@ const rateRules = [
   }
 ]
 
-// Methods
 const updateRate = async () => {
   const { valid } = await formRef.value.validate()
   if (!valid) return
@@ -195,13 +186,19 @@ const updateRate = async () => {
   }
 
   loading.value = true
-  
+
   try {
-    await apiClient.put(`/admin/market-rates/${props.marketRate.rate_id}`, form)
+    const response = await apiClient.put(`/admin/market-rates/${props.marketRate.rate_id}`, form)
+
+    if (!response.success) {
+      showError(response.statusCode === 403 ? '相場価格を編集する権限がありません' : (response.error || '相場価格の更新に失敗しました'))
+      return
+    }
 
     showSuccess('相場価格を更新しました')
     resetForm()
     emit('updated')
+    emit('update:modelValue', false)
   } catch (error) {
     logger.error('相場価格の更新に失敗しました:', error)
     showError('相場価格の更新に失敗しました')
@@ -230,17 +227,15 @@ const setExampleRate = (rate: number) => {
   })
 }
 
-// Load data when marketRate prop changes
 watch(() => props.marketRate, (newRate) => {
   if (newRate && props.modelValue) {
-    // Convert timestamp to datetime-local format
     const date = new Date(newRate.timestamp)
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
     const hours = String(date.getHours()).padStart(2, '0')
     const minutes = String(date.getMinutes()).padStart(2, '0')
-    
+
     form.timestamp = `${year}-${month}-${day}T${hours}:${minutes}`
     form.btc_jpy_rate = newRate.btc_jpy_rate
     formattedRate.value = newRate.btc_jpy_rate.toLocaleString('ja-JP', {
@@ -250,7 +245,6 @@ watch(() => props.marketRate, (newRate) => {
   }
 }, { immediate: true })
 
-// Reset form when dialog closes
 watch(() => props.modelValue, (newValue) => {
   if (!newValue) {
     resetForm()

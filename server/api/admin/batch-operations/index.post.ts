@@ -3,11 +3,11 @@ import { useLogger } from '~/composables/useLogger'
 import { BATCH_OPERATION_STATUS } from '~/types'
 import type { BatchOperationCreateForm, BatchOperationResult } from '~/types'
 import {
-  getActiveUsers,
   createBatchOperation,
   updateBatchOperationStatus,
   createBatchTransactions
 } from '~/server/utils/batch-helpers'
+import { getBatchTargetUsers } from '~/server/utils/segment-helpers'
 
 export default defineEventHandler(async (event) => {
   const logger = useLogger({ prefix: '[AdminBatchOperations-POST]' })
@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
     const currentUser = await requirePermission(event, 'batch:execute')
 
     const body = await readBody<BatchOperationCreateForm>(event)
-    const { adjustment_rate, memo } = body
+    const { adjustment_rate, memo, target_segment_id } = body
 
     // Validation
     if (adjustment_rate === undefined || adjustment_rate === null) {
@@ -38,8 +38,9 @@ export default defineEventHandler(async (event) => {
     const batchId = generateTransactionId()
     logger.info(`一括処理開始 (batch_id: ${batchId}, rate: ${adjustment_rate}%)`)
 
-    // Get active users
-    const activeUsers = await getActiveUsers()
+    // Get target users（セグメント指定時はそのセグメント所属ユーザーのみ、未指定時は全アクティブユーザー。
+    // いずれの場合も運用停止ステートのユーザーは除外される）
+    const activeUsers = await getBatchTargetUsers(target_segment_id)
     if (activeUsers.length === 0) {
       throw createError({
         statusCode: 400,
@@ -47,7 +48,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    logger.info(`対象ユーザー数: ${activeUsers.length}`)
+    logger.info(`対象ユーザー数: ${activeUsers.length}${target_segment_id ? ` (segment: ${target_segment_id})` : ''}`)
 
     // Create batch operation record
     await createBatchOperation(
@@ -55,7 +56,8 @@ export default defineEventHandler(async (event) => {
       adjustment_rate,
       activeUsers.length,
       currentUser.user_id,
-      memo
+      memo,
+      target_segment_id
     )
 
     // Update status to processing

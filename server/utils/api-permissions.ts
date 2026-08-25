@@ -40,6 +40,14 @@ export const API_PERMISSIONS: APIPermissions = {
   '/api/admin/users/*/activate': {
     'POST': { permissions: ['user:update'] }
   },
+
+  '/api/admin/users/*/operation-suspend': {
+    'POST': { permissions: ['user:update'] }
+  },
+
+  '/api/admin/users/*/operation-activate': {
+    'POST': { permissions: ['user:update'] }
+  },
   
   '/api/admin/users/*/delete': {
     'POST': { permissions: ['user:delete'] }
@@ -69,6 +77,43 @@ export const API_PERMISSIONS: APIPermissions = {
   
   '/api/admin/groups/*': {
     'PUT': { permissions: ['group:update'] }
+  },
+
+  '/api/admin/segments': {
+    'GET': { permissions: ['segment:read'] },
+    'POST': { permissions: ['segment:create'] }
+  },
+
+  '/api/admin/segments/*': {
+    'GET': { permissions: ['segment:read'] },
+    'PUT': { permissions: ['segment:update'] },
+    'DELETE': { permissions: ['segment:delete'] }
+  },
+
+  '/api/admin/segments/*/users': {
+    'POST': { permissions: ['segment:update'] }
+  },
+
+  '/api/admin/segments/*/users/*': {
+    'DELETE': { permissions: ['segment:update'] }
+  },
+
+  '/api/admin/invites': {
+    'GET': { permissions: ['invite:read'] },
+    'POST': { permissions: ['invite:create'] }
+  },
+
+  '/api/admin/invites/*': {
+    'DELETE': { permissions: ['invite:revoke'] }
+  },
+
+  '/api/account/sub-accounts': {
+    'GET': { authOnly: true },
+    'POST': { permissions: ['account:create-sub'] }
+  },
+
+  '/api/account/parent': {
+    'GET': { authOnly: true }
   },
   
   '/api/admin/system/sync-cognito': {
