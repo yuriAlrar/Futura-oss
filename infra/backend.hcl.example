@@ -3,6 +3,6 @@
 
 bucket         = "futura-terraform-state-123456789-abc12345"
 key            = "futura/dev/terraform.tfstate"
-region         = "ap-northeast-1"
+region         = "us-east-1"
 dynamodb_table = "futura-terraform-locks"
 encrypt        = true

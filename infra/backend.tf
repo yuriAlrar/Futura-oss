@@ -8,7 +8,7 @@ terraform {
     
     # bucket = "your-terraform-state-bucket"
     # key    = "futura/terraform.tfstate"
-    # region = "ap-northeast-1"
+    # region = "us-east-1"
     
     # セキュリティ設定
     encrypt = true

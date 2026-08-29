@@ -21,7 +21,7 @@ echo "🚀 M・S CFD App - Infrastructure Deployment"
 echo "=============================================="
 
 # 環境変数の設定
-export AWS_REGION="${AWS_REGION:-ap-northeast-1}"
+export AWS_REGION="${AWS_REGION:-us-east-1}"
 export PROJECT_NAME="${PROJECT_NAME:-futura}"
 export ENVIRONMENT="${ENVIRONMENT:-dev}"
 

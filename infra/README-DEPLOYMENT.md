@@ -10,7 +10,7 @@ aws configure
 # または環境変数で設定
 export AWS_ACCESS_KEY_ID="your-access-key"
 export AWS_SECRET_ACCESS_KEY="your-secret-key"
-export AWS_DEFAULT_REGION="ap-northeast-1"
+export AWS_DEFAULT_REGION="us-east-1"
 ```
 
 ### 2. 必要な権限
@@ -73,7 +73,7 @@ terraform apply
 # プロジェクトルートに .env ファイル作成
 NUXT_PUBLIC_COGNITO_USER_POOL_ID=<terraform_output_value>
 NUXT_PUBLIC_COGNITO_CLIENT_ID=<terraform_output_value>
-AWS_REGION=ap-northeast-1
+AWS_REGION=us-east-1
 ```
 
 ### 2. Terraform出力値の確認
@@ -123,5 +123,5 @@ aws s3 rb s3://your-terraform-state-bucket --force
 エラーが発生した場合：
 1. AWS認証情報の確認
 2. 必要権限の確認
-3. リージョン設定の確認（ap-northeast-1）
+3. リージョン設定の確認（us-east-1）
 4. terraform.log でデバッグ情報確認

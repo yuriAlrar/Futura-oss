@@ -56,7 +56,7 @@ infra/
 
 2. **`terraform.tfvars` を編集**:
    ```hcl
-   aws_region   = "ap-northeast-1"
+   aws_region   = "us-east-1"
    environment  = "dev"          # dev, stg, prod のいずれか
    project_name = "futura"
 
@@ -136,7 +136,7 @@ infra/
    | 環境変数名 | 値の例 | 説明 |
    |-----------|--------|------|
    | `ENVIRONMENT` | `dev` | デプロイ環境 (dev/stg/prod) |
-   | `AWS_REGION` | `ap-northeast-1` | AWSリージョン |
+   | `AWS_REGION` | `us-east-1` | AWSリージョン |
    | `PROJECT_NAME` | `futura` | プロジェクト名 |
    | `TF_STATE_BUCKET` | `futura-terraform-state-...` | setup-backend.shで作成したバケット名 |
    | `UPLOADS_BUCKET_NAME` | (オプション) | S3バケット名のカスタマイズ（グローバルにユニーク） |
@@ -238,7 +238,7 @@ terraform output
 # Cognito設定
 NUXT_PUBLIC_COGNITO_USER_POOL_ID="<cognito_user_pool_id の値>"
 NUXT_PUBLIC_COGNITO_CLIENT_ID="<cognito_user_pool_client_id の値>"
-NUXT_PUBLIC_COGNITO_REGION="ap-northeast-1"
+NUXT_PUBLIC_COGNITO_REGION="us-east-1"
 
 # S3設定
 NUXT_S3_BUCKET_NAME="<s3_bucket_name の値>"

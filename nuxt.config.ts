@@ -95,7 +95,7 @@ export default defineNuxtConfig({
   // Runtime configuration
   runtimeConfig: {
     // Private keys (only available on the server-side)
-    awsRegion: process.env.AWS_REGION || 'ap-northeast-1',
+    awsRegion: process.env.AWS_REGION || 'us-east-1',
     dynamodbUsersTable: process.env.NUXT_DYNAMODB_USERS_TABLE || 'futura-dev-users',
     dynamodbTransactionsTable: process.env.NUXT_DYNAMODB_TRANSACTIONS_TABLE || 'futura-dev-transactions',
     dynamodbMarketRatesTable: process.env.NUXT_DYNAMODB_MARKET_RATES_TABLE || 'futura-dev-market-rates',

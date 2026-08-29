@@ -24,7 +24,7 @@ cd "$(dirname "$0")"
 
 readonly TERRAFORM_VERSION="1.7.5"   # infra/buildspec.yml と揃えること
 readonly PROJECT_NAME="${PROJECT_NAME:-futura}"
-readonly AWS_REGION="${AWS_REGION:-ap-northeast-1}"
+readonly AWS_REGION="${AWS_REGION:-us-east-1}"
 
 # CodeCommitリポジトリは全環境で1つを共有し、環境をブランチで分ける運用。
 # チェックアウト中のブランチがそのまま適用対象のインフラコードになる。
@@ -66,7 +66,7 @@ AWS CloudShell からインフラをデプロイするためのスクリプト�
   TF_STATE_BUCKET      state バケットを明示（複数見つかる場合に必要）
   UPLOADS_BUCKET_NAME  S3アップロードバケット名のカスタマイズ
   PROJECT_NAME         既定: futura
-  AWS_REGION           既定: ap-northeast-1
+  AWS_REGION           既定: us-east-1
 USAGE
     exit 1
 }

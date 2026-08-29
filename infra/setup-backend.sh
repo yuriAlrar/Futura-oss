@@ -10,7 +10,7 @@ echo "=================================================="
 
 # 環境変数の確認
 if [ -z "$AWS_REGION" ]; then
-    export AWS_REGION="ap-northeast-1"
+    export AWS_REGION="us-east-1"
 fi
 
 if [ -z "$PROJECT_NAME" ]; then
@@ -35,10 +35,18 @@ echo ""
 
 # S3バケット作成
 echo "🪣 Creating S3 bucket for Terraform state..."
-aws s3api create-bucket \
-    --bucket "$BUCKET_NAME" \
-    --region "$AWS_REGION" \
-    --create-bucket-configuration LocationConstraint="$AWS_REGION"
+# us-east-1 は S3 のデフォルトリージョンであり、LocationConstraint を明示すると
+# 「The specified location-constraint is not valid」で失敗する。他リージョンでは必須。
+if [ "$AWS_REGION" = "us-east-1" ]; then
+    aws s3api create-bucket \
+        --bucket "$BUCKET_NAME" \
+        --region "$AWS_REGION"
+else
+    aws s3api create-bucket \
+        --bucket "$BUCKET_NAME" \
+        --region "$AWS_REGION" \
+        --create-bucket-configuration LocationConstraint="$AWS_REGION"
+fi
 
 # S3バケットの暗号化有効化
 echo "🔐 Enabling S3 bucket encryption..."

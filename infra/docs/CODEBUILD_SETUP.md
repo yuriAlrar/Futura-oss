@@ -34,7 +34,7 @@ AWS Resources (Cognito, DynamoDB, S3, etc.)
 cd infra
 
 # 環境変数を設定
-export AWS_REGION="ap-northeast-1"
+export AWS_REGION="us-east-1"
 export PROJECT_NAME="futura"
 export ENVIRONMENT="dev"  # または staging, prod
 
@@ -52,7 +52,7 @@ export ENVIRONMENT="dev"  # または staging, prod
 ```hcl
 bucket  = "futura-terraform-state-646223199816-ed154e80"
 key     = "futura/dev/terraform.tfstate"
-region  = "ap-northeast-1"
+region  = "us-east-1"
 encrypt = true
 ```
 
@@ -143,7 +143,7 @@ AWS Management Consoleで各環境用のプロジェクトを作成します。
 | 名前 | 値 | タイプ |
 |------|-----|--------|
 | ENVIRONMENT | `dev` (または `staging`, `prod`) | プレーンテキスト |
-| AWS_REGION | `ap-northeast-1` | プレーンテキスト |
+| AWS_REGION | `us-east-1` | プレーンテキスト |
 | PROJECT_NAME | `futura` | プレーンテキスト |
 | TF_STATE_BUCKET | `futura-terraform-state-646223199816-ed154e80` | プレーンテキスト |
 
@@ -200,7 +200,7 @@ aws codebuild batch-get-builds --ids <build-id>
 
 ```
 📊 Infrastructure Outputs:
-cognito_user_pool_id = "ap-northeast-1_XXXXXXXXX"
+cognito_user_pool_id = "us-east-1_XXXXXXXXX"
 cognito_user_pool_client_id = "XXXXXXXXXXXXXXXXXXXXXXXXXX"
 s3_bucket_name = "futura-dev-uploads"
 dynamodb_table_names = {...}

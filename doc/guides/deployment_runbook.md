@@ -86,50 +86,86 @@ aws codecommit create-repository --repository-name futura
 
 ### a. CloudShellの準備とソース取得（リージョンごとに初回のみ）
 
-CloudShellを開き（リージョン: `ap-northeast-1`）、CodeCommitからcloneする。
+CloudShellを開き（リージョン: `us-east-1`）、CodeCommitからcloneする。
 CloudShellはコンソールログインの認証情報を継承しているためcredential helperが即使える
 （AWS専用の使い捨て環境なのでglobal設定で問題ない）:
 
 ```bash
 git config --global credential.helper '!aws codecommit credential-helper $@'
 git config --global credential.UseHttpPath true
-cd ~ && git clone https://git-codecommit.ap-northeast-1.amazonaws.com/v1/repos/futura
+cd ~ && git clone https://git-codecommit.us-east-1.amazonaws.com/v1/repos/futura
 ```
 
 > Terraformの導入は次のステップの `cloudshell.sh` が自動で行う（`$HOME/bin` に配置）。
 > **CloudShellの `$HOME` は最終利用から120日で削除される。** 消えるのはTerraformバイナリだけで、
 > state本体はS3にあるため、スクリプトを再実行すれば自動で復旧する。
 
-### b. state バケットの指定
+### b. state バケットの用意
 
 `backend.hcl` は**stateファイルではなく、stateの置き場所を指す4行の接続情報**。
 state本体（`terraform.tfstate`）はS3上にあり、`terraform init` 以降は自動で読み書きされる。
 **このファイルは `cloudshell.sh` が環境名から自動生成する**ので手書きは不要。
 
-state バケットが複数ある場合のみ、どれを使うか明示する必要がある:
+まず既存のstateバケットを確認する:
 
 ```bash
 aws s3api list-buckets --query "Buckets[?starts_with(Name, 'futura-terraform-state-')].Name" --output text
 ```
 
-複数出た場合は、対象環境のstateを持つバケットを選んで指定する
-（`cloudshell.sh` が各バケットの中身を並べて表示するので、それを見て判断してもよい）:
-
-```bash
-export TF_STATE_BUCKET=futura-terraform-state-<ACCOUNT_ID>-<SUFFIX>
-echo 'export TF_STATE_BUCKET=futura-terraform-state-<ACCOUNT_ID>-<SUFFIX>' >> ~/.bashrc
-```
-
-> ⚠️ **バケットが1つも無い場合（アカウント新設時）のみ** `setup-backend.sh` を実行する。
-> このスクリプトは `date +%s` からバケット名を生成するため、**実行するたびに別名のバケットを作る**。
-> 既存バケットがあるのに実行すると、空のstateを掴んだTerraformが「まだ何も作られていない」と
-> 誤認し、apply時に既存リソースと衝突するか二重作成する。
-> `cloudshell.sh` はこの事故を防ぐため、バケットの**検出のみ**を行い作成はしない。
+#### 0件の場合（新規アカウント）— `setup-backend.sh` を1回だけ実行
 
 ```bash
 cd ~/futura/infra
-ENVIRONMENT=prod ./setup-backend.sh   # バケットが1つも無いときだけ
+ENVIRONMENT=prod ./setup-backend.sh
 ```
+
+S3バケットを暗号化・バージョニング有効で作成する。
+以降は `cloudshell.sh` が自動検出するので、`TF_STATE_BUCKET` の指定は不要。
+
+> ⚠️ **このスクリプトは「アカウントで初回の1回だけ」実行する。**
+> バケット名を `date +%s` から生成するため、**実行するたびに別名のバケットを作る**。
+> 2つ目以降の環境（stg等）では実行せず、既存バケットをそのまま使う
+> （`cloudshell.sh` が `key` を `futura/{環境名}/terraform.tfstate` に振り分ける）。
+
+#### 1件の場合 — 何もしなくてよい
+
+`cloudshell.sh` が自動検出する。
+
+#### 2件以上ある場合 — どれを使うか明示する
+
+過去に `setup-backend.sh` が複数回実行されると孤立バケットが残る。
+`cloudshell.sh` が各バケットの中身を並べて表示するので、対象環境のstateを持つ方を選ぶ:
+
+```bash
+export TF_STATE_BUCKET=<bucket-name>
+echo 'export TF_STATE_BUCKET=<bucket-name>' >> ~/.bashrc
+```
+
+> 誤ったバケットを選ぶと、Terraformが空のstateを掴んで「まだ何も作られていない」と誤認し、
+> apply時に既存リソースと衝突するか**リソースを二重作成する**。
+> DynamoDBは名前が固定なので衝突して止まるが、**Cognitoはプール名の重複を許すため黙って増える**。
+
+#### S3バケット名のグローバル衝突に注意
+
+アップロード用バケットは既定で `futura-{環境名}-uploads` という名前になるが、
+**S3のバケット名は全AWSアカウント横断でグローバル一意**である。
+別アカウントで同名のバケットが既に使われていると apply が失敗する。
+
+事前確認:
+
+```bash
+aws s3api head-bucket --bucket futura-prod-uploads
+```
+
+`404` なら空き。それ以外（`403` や成功レスポンス）なら他で使われているため、
+一意な名前を指定する:
+
+```bash
+export UPLOADS_BUCKET_NAME=futura-prod-uploads-<識別子>
+```
+
+> ⚠️ **カスタマイズした場合は `.env.{STAGE}` の `NUXT_S3_UPLOADS_BUCKET` も
+> 同じ値に直すこと**（e節を参照）。ずれるとアップロードが失敗する。
 
 ### c. Terraformの実行とoutputsの確認
 
@@ -228,8 +264,8 @@ DynamoDBテーブル自体はTerraformで作成されるが、以下のレコー
 - アップロード用S3バケットは完全にプライベート（[infra/s3/main.tf](../../infra/s3/main.tf) で
   パブリックアクセスを4項目とも遮断）
 - そのため画像配信にはバケットを origin とする**CloudFrontディストリビューションが必要**
-- **Terraformはこれを作らない。** 環境ごとに手動作成する
-  （dev環境は `dev.resource.futura.wakwak-oripa.com` → `futura-dev-uploads` の構成で手動作成済み）
+- **Terraformはこれを作らない。** 環境ごとに、アップロード用バケットを origin とする
+  ディストリビューションを手動で作成し、独自ドメインを割り当てる
 
 設定しないまま運用すると、[upload/image.post.ts](../../server/api/upload/image.post.ts) が
 `Image base URL is not configured` で500を返す。プレースホルダのまま設定した場合は

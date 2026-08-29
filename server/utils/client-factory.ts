@@ -28,7 +28,7 @@ function getBaseAwsConfig() {
   const config = useRuntimeConfig()
   
   const baseConfig = {
-    region: config.awsRegion || process.env.AWS_REGION || 'ap-northeast-1'
+    region: config.awsRegion || process.env.AWS_REGION || 'us-east-1'
   }
   
   // Lambda環境では IAMロール を自動使用
@@ -119,7 +119,7 @@ export function getEnvironmentDiagnostics() {
   return {
     environmentType: isLambdaEnvironment() ? 'lambda' : 'local',
     isLambda: isLambdaEnvironment(),
-    region: process.env.AWS_REGION || 'ap-northeast-1',
+    region: process.env.AWS_REGION || 'us-east-1',
     hasCredentials: !!(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY),
     hasProfile: !!process.env.AWS_PROFILE,
     nodeEnv: process.env.NODE_ENV,
