@@ -147,25 +147,28 @@ echo 'export TF_STATE_BUCKET=<bucket-name>' >> ~/.bashrc
 
 #### S3バケット名のグローバル衝突に注意
 
-アップロード用バケットは既定で `futura-{環境名}-uploads` という名前になるが、
-**S3のバケット名は全AWSアカウント横断でグローバル一意**である。
-別アカウントで同名のバケットが既に使われていると apply が失敗する。
+アップロード用バケットの名前は **`.env.{環境名}` の `NUXT_S3_UPLOADS_BUCKET` が正本**で、
+`cloudshell.sh` がこの値を読み取ってTerraformへ渡す。バケットを作る側（Terraform）と
+読む側（アプリ）が必ず同じ値になるため、片方だけ直して壊す事故が起きない。
 
-事前確認:
+**S3のバケット名は全AWSアカウント横断でグローバル一意**なので、別アカウントで同名が
+使われていると apply が失敗する（`the region us-east-1 is wrong; expecting ...` のような
+エラーになることもある）。
 
-```bash
-aws s3api head-bucket --bucket futura-prod-uploads
-```
-
-`404` なら空き。それ以外（`403` や成功レスポンス）なら他で使われているため、
-一意な名前を指定する:
+デプロイ前の確認:
 
 ```bash
-export UPLOADS_BUCKET_NAME=futura-prod-uploads-<識別子>
+aws s3api head-bucket --bucket $(grep '^NUXT_S3_UPLOADS_BUCKET=' ../.env.prod | cut -d= -f2)
 ```
 
-> ⚠️ **カスタマイズした場合は `.env.{STAGE}` の `NUXT_S3_UPLOADS_BUCKET` も
-> 同じ値に直すこと**（e節を参照）。ずれるとアップロードが失敗する。
+`404` なら空き。それ以外なら**`.env.{環境名}` の値を書き換えて**CodeCommitへpushする。
+環境ごとに規則がばらつくと運用で混乱するため、**全環境に共通のサフィックスを付ける**運用としている:
+
+```
+NUXT_S3_UPLOADS_BUCKET=futura-{環境名}-uploads-{共通サフィックス}
+```
+
+> バケット名は事実上の公開情報なので、サフィックスにAWSアカウントIDのような値は使わないこと。
 
 ### c. Terraformの実行とoutputsの確認
 
@@ -249,9 +252,8 @@ DynamoDBテーブル自体はTerraformで作成されるが、以下のレコー
 
 > CognitoのIDは `.env.*` には書かない。Amplifyの環境変数で管理する（fを参照）。
 
-> ⚠️ **`UPLOADS_BUCKET_NAME` でS3バケット名をカスタマイズした場合は、
-> `.env.{STAGE}` の `NUXT_S3_UPLOADS_BUCKET` も同じ値に直すこと。**
-> Terraformが作るバケットと `.env` の記載がずれると、アップロードが失敗する。
+> S3アップロードバケット名は `.env.{STAGE}` の `NUXT_S3_UPLOADS_BUCKET` が正本で、
+> `cloudshell.sh` がここからTerraformへ渡す。変更するときはこのファイルだけ直せばよい（b節を参照）。
 
 #### 画像配信URL（`NUXT_IMAGE_BASE_URL`）
 

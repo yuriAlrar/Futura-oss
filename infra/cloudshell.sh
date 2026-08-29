@@ -64,8 +64,10 @@ AWS CloudShell からインフラをデプロイするためのスクリプト�
 環境変数での上書き:
   DEPLOY_BRANCH        想定ブランチを上書き（既定: prod→main / stg→stg）
   TF_STATE_BUCKET      state バケットを明示（複数見つかる場合に必要）
-  UPLOADS_BUCKET_NAME  S3アップロードバケット名のカスタマイズ
   PROJECT_NAME         既定: futura
+
+S3アップロードバケット名は .env.<env> の NUXT_S3_UPLOADS_BUCKET から読み取る
+（アプリと同じ値をTerraformに渡し、両者のずれを防ぐため）。
   AWS_REGION           既定: us-east-1
 USAGE
     exit 1
@@ -195,6 +197,20 @@ detect_state_bucket() {
     echo "$found"
 }
 
+# アップロード用S3バケット名の正本は .env.{env} の NUXT_S3_UPLOADS_BUCKET。
+# バケットを作る側（Terraform）と読む側（アプリ）で値がずれるとアップロードが
+# 失敗するため、コマンドライン引数や環境変数で別途渡すのではなく、
+# アプリが実際に参照する値をそのままTerraformへ流す。
+# S3のバケット名はAWSアカウント横断でグローバル一意のため、既定名が他アカウントに
+# 押さえられている場合はこのファイルを書き換えることで両者まとめて変更できる。
+read_uploads_bucket() {
+    # local の引数は代入前にまとめて展開されるため、env を参照する f は別行で宣言する
+    local env="$1"
+    local f="../.env.${env}"
+    [ -f "$f" ] || return 0
+    grep -E '^NUXT_S3_UPLOADS_BUCKET=' "$f" | tail -1 | cut -d= -f2- | tr -d "\"' " 
+}
+
 # backend.hcl と terraform.tfvars を環境名から生成する。
 # 両者を必ず同じ引数から作ることで、state の向き先と構成の環境が食い違う事故を防ぐ。
 write_config() {
@@ -212,10 +228,14 @@ aws_region   = "${AWS_REGION}"
 environment  = "${env}"
 project_name = "${PROJECT_NAME}"
 EOF
-    # 'A && B' 形式にすると、関数の最終文になった瞬間に set -e で落ちるため if を使う
-    if [ -n "${UPLOADS_BUCKET_NAME:-}" ]; then
-        echo "uploads_bucket_name = \"${UPLOADS_BUCKET_NAME}\"" >> terraform.tfvars
-        log_info "  S3アップロードバケット名: ${UPLOADS_BUCKET_NAME}"
+    local uploads
+    uploads=$(read_uploads_bucket "$env")
+    if [ -n "$uploads" ]; then
+        echo "uploads_bucket_name = \"${uploads}\"" >> terraform.tfvars
+        log_info "  S3アップロードバケット: ${uploads}（.env.${env} より）"
+    else
+        log_warning ".env.${env} に NUXT_S3_UPLOADS_BUCKET がありません"
+        log_warning "Terraformの既定名 futura-${env}-uploads を使います（グローバル衝突に注意）"
     fi
 
     log_success "backend.hcl / terraform.tfvars を生成しました（environment=${env}）"

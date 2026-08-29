@@ -139,7 +139,6 @@ infra/
    | `AWS_REGION` | `us-east-1` | AWSリージョン |
    | `PROJECT_NAME` | `futura` | プロジェクト名 |
    | `TF_STATE_BUCKET` | `futura-terraform-state-...` | setup-backend.shで作成したバケット名 |
-   | `UPLOADS_BUCKET_NAME` | (オプション) | S3バケット名のカスタマイズ（グローバルにユニーク） |
 
 3. **CodeBuildからビルドを実行**
 
@@ -200,9 +199,10 @@ S3バケット名は**全世界でユニーク**である必要があります�
    uploads_bucket_name = "your-company-futura-dev-uploads-unique-identifier"
    ```
 
-2. **CodeBuildの場合**（環境変数）:
+2. **`.env.{環境名}` の `NUXT_S3_UPLOADS_BUCKET`**（推奨。`cloudshell.sh` / `buildspec.yml` の
+   いずれもこの値を読み取ってTerraformへ渡すため、アプリとの食い違いが起きない）:
    ```
-   UPLOADS_BUCKET_NAME=your-company-futura-dev-uploads-unique-identifier
+   NUXT_S3_UPLOADS_BUCKET=futura-dev-uploads-xxxxxx
    ```
 
 **推奨される命名規則**:

@@ -9,7 +9,6 @@ version: 0.2
 #   - TF_STATE_BUCKET: Terraform Stateバケット名 (事前作成必須)
 #
 # オプションの環境変数:
-#   - UPLOADS_BUCKET_NAME: S3アップロードバケット名のカスタマイズ (グローバルにユニークな名前が必要)
 
 env:
   variables:
@@ -91,10 +90,15 @@ phases:
         project_name = "$PROJECT_NAME"
         EOF
 
-        # オプション: UPLOADS_BUCKET_NAME環境変数が設定されている場合のみ追加
-        if [ -n "$UPLOADS_BUCKET_NAME" ]; then
-          echo "uploads_bucket_name = \"$UPLOADS_BUCKET_NAME\"" >> terraform.tfvars
-          echo "✅ Custom S3 bucket name: $UPLOADS_BUCKET_NAME"
+        # S3アップロードバケット名は .env.{ENVIRONMENT} の NUXT_S3_UPLOADS_BUCKET が正本。
+        # バケットを作る側(Terraform)と読む側(アプリ)でずれるとアップロードが失敗するため、
+        # cloudshell.sh と同じくアプリが参照する値をそのままTerraformへ流す。
+        UPLOADS_BUCKET=$(grep -E '^NUXT_S3_UPLOADS_BUCKET=' "../.env.${ENVIRONMENT}" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d "\"' ")
+        if [ -n "$UPLOADS_BUCKET" ]; then
+          echo "uploads_bucket_name = \"$UPLOADS_BUCKET\"" >> terraform.tfvars
+          echo "✅ S3 uploads bucket: $UPLOADS_BUCKET (from .env.${ENVIRONMENT})"
+        else
+          echo "⚠️  .env.${ENVIRONMENT} に NUXT_S3_UPLOADS_BUCKET がありません"
         fi
 
         cat terraform.tfvars
