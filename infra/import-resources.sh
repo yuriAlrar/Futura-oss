@@ -49,10 +49,6 @@ terraform import 'module.lambda.aws_cloudwatch_log_group.nuxt_app' "/aws/lambda/
 terraform import 'module.lambda.aws_lambda_function.api_handler' "${PROJECT_NAME}-${ENVIRONMENT}-api-handler" 2>/dev/null || echo "  Lambda function already imported or not found"
 terraform import 'module.lambda.aws_lambda_permission.api_gateway_invoke' "${PROJECT_NAME}-${ENVIRONMENT}-api-handler/AllowExecutionFromAPIGateway" 2>/dev/null || echo "  Lambda permission already imported or not found"
 
-# Cognito User Pool Domain
-echo "Importing Cognito resources..."
-terraform import 'module.cognito.aws_cognito_user_pool_domain.main' "${PROJECT_NAME}-${ENVIRONMENT}-auth" 2>/dev/null || echo "  Cognito domain already imported or not found"
-
 echo ""
 echo "✅ Import completed!"
 echo ""

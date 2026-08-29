@@ -2,6 +2,9 @@
 
 このディレクトリには、FuturaアプリケーションのAWSインフラストラクチャを管理するTerraform設定ファイルが含まれています。
 
+> **実際のデプロイ手順は [doc/guides/deployment_runbook.md](../doc/guides/deployment_runbook.md) を参照してください。**
+> 本ドキュメントはリソース一覧・変数・トラブルシューティングのリファレンスです。
+
 ## ディレクトリ構成
 
 ```
@@ -12,8 +15,9 @@ infra/
 ├── outputs.tf                   # 出力値定義
 ├── terraform.tfvars.example     # 変数ファイルのサンプル
 ├── buildspec.yml                # AWS CodeBuild用ビルド設定
-├── setup-backend.sh             # Terraform Stateバケットセットアップスクリプト
-├── deploy.sh                    # ローカルデプロイスクリプト
+├── cloudshell.sh                # CloudShellからのデプロイスクリプト（推奨）
+├── setup-backend.sh             # Terraform Stateバケット作成（アカウント初回のみ）
+├── deploy.sh                    # ローカルデプロイスクリプト（非推奨・下記注意）
 ├── cognito/                     # Cognito User Pool設定
 ├── dynamodb/                    # DynamoDBテーブル設定
 ├── s3/                          # S3バケット設定
@@ -53,17 +57,14 @@ infra/
 2. **`terraform.tfvars` を編集**:
    ```hcl
    aws_region   = "ap-northeast-1"
-   environment  = "dev"          # dev, staging, prod のいずれか
+   environment  = "dev"          # dev, stg, prod のいずれか
    project_name = "futura"
 
    # オプション: S3バケット名をカスタマイズ（グローバルにユニークである必要があります）
    # uploads_bucket_name = "my-company-futura-dev-uploads-unique-123"
-
-   # オプション: Cognito Domainをカスタマイズ（リージョン内でユニークである必要があります）
-   # cognito_domain = "my-company-futura-dev-auth"
    ```
 
-3. **Terraform Stateバケットをセットアップ** (初回のみ):
+3. **Terraform Stateバケットをセットアップ** (アカウントで初回のみ):
    ```bash
    ./setup-backend.sh
    ```
@@ -71,6 +72,13 @@ infra/
    このスクリプトは以下を実行します:
    - S3バケットの作成(暗号化、バージョニング有効)
    - `backend.hcl` ファイルの生成
+
+   > ⚠️ **既にstateバケットがある場合は実行しないでください。**
+   > バケット名を `date +%s` から生成するため、実行するたびに別名の新しいバケットを作ります。
+   > 既存バケットがあるのに実行すると、空のstateを掴んだTerraformが「まだ何も作られていない」と
+   > 誤認し、apply時に既存リソースと衝突するか二重作成します。
+   > 2つ目以降の環境では、既存バケットを使い `key` だけを
+   > `futura/{環境名}/terraform.tfstate` に変えた `backend.hcl` を手書きしてください。
 
 4. **Terraformを初期化**:
    ```bash
@@ -109,7 +117,7 @@ infra/
 #### 特徴
 
 - ✅ ローカル環境に依存しない一貫したデプロイ
-- ✅ 環境変数による柔軟な環境管理(dev/staging/prod)
+- ✅ 環境変数による柔軟な環境管理(dev/stg/prod)
 - ✅ AWSマネージドな実行環境
 - ✅ CloudWatch Logsによるデプロイログの保存
 
@@ -127,12 +135,11 @@ infra/
 
    | 環境変数名 | 値の例 | 説明 |
    |-----------|--------|------|
-   | `ENVIRONMENT` | `dev` | デプロイ環境 (dev/staging/prod) |
+   | `ENVIRONMENT` | `dev` | デプロイ環境 (dev/stg/prod) |
    | `AWS_REGION` | `ap-northeast-1` | AWSリージョン |
    | `PROJECT_NAME` | `futura` | プロジェクト名 |
    | `TF_STATE_BUCKET` | `futura-terraform-state-...` | setup-backend.shで作成したバケット名 |
    | `UPLOADS_BUCKET_NAME` | (オプション) | S3バケット名のカスタマイズ（グローバルにユニーク） |
-   | `COGNITO_DOMAIN` | (オプション) | Cognito Domainのカスタマイズ（リージョン内でユニーク） |
 
 3. **CodeBuildからビルドを実行**
 
@@ -202,33 +209,6 @@ S3バケット名は**全世界でユニーク**である必要があります�
 - 会社名やチーム名のプレフィックスを追加: `acme-futura-dev-uploads`
 - AWSアカウントIDのサフィックスを追加: `futura-dev-uploads-123456789012`
 - ランダムな識別子を追加: `futura-dev-uploads-a1b2c3d4`
-
-### Cognito User Pool Domainのカスタマイズ
-
-Cognito User Pool Domainは**AWSリージョン内でユニーク**である必要があります。同じリージョンで同じドメイン名が使用されている場合、デプロイが失敗します。
-
-**デフォルトの命名規則**:
-```
-{project_name}-{environment}-auth
-例: futura-dev-auth
-```
-
-**カスタマイズ方法**:
-
-1. **Terraformの場合**（`terraform.tfvars`）:
-   ```hcl
-   cognito_domain = "your-company-futura-dev-auth"
-   ```
-
-2. **CodeBuildの場合**（環境変数）:
-   ```
-   COGNITO_DOMAIN=your-company-futura-dev-auth
-   ```
-
-**推奨される命名規則**:
-- 会社名やチーム名のプレフィックスを追加: `acme-futura-dev-auth`
-- AWSアカウントIDのサフィックスを追加: `futura-dev-auth-123456`
-- ランダムな識別子を追加: `futura-dev-auth-a1b2c3`
 
 ## デプロイ後の設定
 

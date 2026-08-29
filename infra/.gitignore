@@ -4,7 +4,7 @@
 *.tfvars
 !*.tfvars.example
 .terraform/
-.terraform.lock.hcl
+# .terraform.lock.hcl は意図的にコミットする（provider バージョンを環境間で固定するため）
 backend.hcl
 tfplan
 crash.log

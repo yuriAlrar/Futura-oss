@@ -24,9 +24,8 @@ provider "aws" {
 module "cognito" {
   source = "./cognito"
 
-  environment    = var.environment
-  project_name   = var.project_name
-  cognito_domain = var.cognito_domain
+  environment  = var.environment
+  project_name = var.project_name
 }
 
 # DynamoDB

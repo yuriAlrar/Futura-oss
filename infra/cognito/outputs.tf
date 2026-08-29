@@ -13,11 +13,6 @@ output "user_pool_client_id" {
   value       = aws_cognito_user_pool_client.main.id
 }
 
-output "user_pool_domain" {
-  description = "Cognito ユーザープールドメイン"
-  value       = aws_cognito_user_pool_domain.main.domain
-}
-
 output "administrator_group_name" {
   description = "管理者グループ名"
   value       = aws_cognito_user_group.administrator.name

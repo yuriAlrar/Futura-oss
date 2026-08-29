@@ -14,8 +14,3 @@ project_name = "futura"
 # If not specified, defaults to: {project_name}-{environment}-uploads
 # Uncomment and customize if you encounter bucket name conflicts:
 # uploads_bucket_name = "your-company-futura-dev-uploads-unique-identifier"
-
-# Optional: Custom Cognito User Pool Domain (must be unique within the AWS region)
-# If not specified, defaults to: {project_name}-{environment}-auth
-# Uncomment and customize if you encounter domain conflicts:
-# cognito_domain = "your-company-futura-dev-auth"

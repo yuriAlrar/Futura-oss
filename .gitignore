@@ -150,7 +150,9 @@ vite.config.ts.timestamp-*
 *.tfvars
 !*.tfvars.example
 .terraform/
-.terraform.lock.hcl
+# .terraform.lock.hcl は意図的にコミットする。
+# provider のバージョンを環境間（ローカル / CloudShell / CodeBuild）で固定し、
+# 同じ構成が同じ provider で再現されることを保証するため。
 crash.log
 crash.*.log
 

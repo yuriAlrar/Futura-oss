@@ -5,133 +5,253 @@
 ## 関連ドキュメント
 
 - [infra/README.md](../../infra/README.md) — Terraformによるインフラ構築の詳細（リソース一覧、変数、トラブルシューティング）
-- [infra/docs/CODEBUILD_SETUP.md](../../infra/docs/CODEBUILD_SETUP.md) — インフラデプロイ用CodeBuildプロジェクトのセットアップ詳細
+- [infra/docs/CODEBUILD_SETUP.md](../../infra/docs/CODEBUILD_SETUP.md) — インフラデプロイをCodeBuildへ移行する場合のセットアップ詳細
 - [database_specification.md](../specs/database_specification.md) — DynamoDBテーブル設計
 
 ## 全体構成
 
 ```
-┌─────────────────────────┐        ┌──────────────────────────┐
-│  infra/ (Terraform)      │        │  アプリ本体 (Nuxt3)        │
-│  - Cognito User Pool     │        │  - 静的アセット (SPA)       │
-│  - DynamoDB (8テーブル)   │◄───────┤  - server/api/** (Compute) │
-│  - S3 (アップロード)      │  参照   │                            │
-│  - IAM                   │        │  AWS Amplify Hosting        │
-│  Lambda(placeholder,未使用)│        │  (環境ごとに1アプリ)         │
-└─────────────────────────┘        └──────────────────────────┘
-        ↑ CodeBuild (環境ごとに1プロジェクト)     ↑ ブランチpushで自動デプロイ
-   futura-infra-deploy-{dev|staging|prod}     futura-{dev|stg|prod} (Amplifyアプリ)
+ ┌──────────────┐     git push       ┌──────────────────┐
+ │  操作端末      │ ─────────────────► │  CodeCommit       │
+ │  git のみ      │                    │  futura（単一）    │
+ └──────────────┘                    │   ├ main → prod    │
+                                     │   └ stg  → stg     │
+                                     └────────┬─────────┘
+                                              │ ブランチごとに接続（自動ビルド）
+        ┌─────────────────────────┐           ▼
+        │  AWS CloudShell          │   ┌──────────────────────────┐
+        │  Terraform を実行         │   │  AWS Amplify Hosting      │
+        └───────────┬─────────────┘   │  - 静的アセット (SPA)       │
+                    │ apply           │  - server/api/** (Compute) │
+                    ▼                 │  futura-{env}(アプリ)      │
+        ┌─────────────────────────┐   └──────────┬───────────────┘
+        │  infra/ (Terraform)      │              │ 参照
+        │  - Cognito User Pool     │◄─────────────┘
+        │  - DynamoDB (9テーブル)   │
+        │  - S3 (アップロード)       │
+        │  - IAM (SSR Computeロール)│
+        │  Lambda(placeholder,未使用)│
+        └─────────────────────────┘
 ```
 
-環境は **dev / stg / prod** の3系統。それぞれ独立したTerraform state・独立したAmplifyアプリを持つ（環境間でリソースは共有しない）。
+運用環境は **prod / stg** の2系統（`dev` は既存環境として残存）。
+それぞれ独立したTerraform state（同一バケット内の別キー）・独立したAmplifyアプリを持ち、
+**CodeCommitの別ブランチ**に対応する。
+
+> 環境名は `dev` / `stg` / `prod` のみ有効です（[infra/variables.tf](../../infra/variables.tf)）。
+> `staging` と書くとバリデーションで弾かれます。
+
+### 役割分担
+
+| 場所 | 担当 | 必要なもの |
+|---|---|---|
+| 操作端末 | ソースの push のみ | `git` と CodeCommitへの認証手段のみ |
+| CloudShell | Terraform（インフラ構築・変更） | ブラウザのみ。認証はコンソールログインを継承 |
+| Amplify | アプリのビルド・ホスティング | CodeCommit接続で自動 |
+
+**なぜGitHubではなくCodeCommitか**: セキュリティ要件によりAWSから外部Gitプロバイダに接続できないため。
+また、Amplify Hostingは**SSRアプリの手動デプロイ（zip/S3アップロード）を公式にサポートしていない**ため、
+Gitプロバイダ接続が必須であり、AWS内で完結するCodeCommitを選択している。
+
+---
 
 ## 1. 新規環境構築（初期構築）
 
-新しい環境（例: 新規クライアント向けにdev一式を新設）を立ち上げる際の手順。**a〜gの順番で実施する。**
+新しい環境を立ち上げる際の手順。**a〜hの順番で実施する。**
 
-### a. Terraform Stateバケットの作成（環境ごとに初回のみ）
+### 前提
+
+**デプロイ対象のソースがCodeCommitリポジトリ `futura` にpush済みであること。**
+push方法（SSH鍵 / git-remote-codecommit / HTTPS Git認証情報）は問わない。
+
+リポジトリは**全環境で1つ**を共有し、**環境はブランチで分ける**。
+インフラ（Terraform）とアプリ（Amplify）は必ず同じブランチを見る。
+
+| 環境 | ブランチ | Amplifyアプリ |
+|---|---|---|
+| prod | `main` | `futura-prod` |
+| stg | `stg` | `futura-stg` |
+
+> `cloudshell.sh` はこの対応を `expected_branch_for()` に持っており、
+> 想定外のブランチで実行すると警告し、deploy時は確認を求める。
+> 例外的に別ブランチを試したい場合は `DEPLOY_BRANCH=<branch>` で上書きできる。
+
+リリースは **`stg` で検証 → `main` へマージ → prod反映** の順に進める。
+
+リポジトリがまだ無い場合はCloudShellで作成する:
 
 ```bash
-cd infra
-export AWS_REGION="ap-northeast-1"
-export PROJECT_NAME="futura"
-export ENVIRONMENT="dev"   # dev / staging / prod
-./setup-backend.sh
+aws codecommit create-repository --repository-name futura
 ```
 
-生成された`backend.hcl`のバケット名を控えておく（次のCodeBuild設定で使用）。詳細は[infra/README.md](../../infra/README.md#オプション2-aws-codebuildからのデプロイ-推奨)を参照。
+### a. CloudShellの準備とソース取得（リージョンごとに初回のみ）
 
-### b. CodeBuildプロジェクトの作成（環境ごとに1つ）
+CloudShellを開き（リージョン: `ap-northeast-1`）、CodeCommitからcloneする。
+CloudShellはコンソールログインの認証情報を継承しているためcredential helperが即使える
+（AWS専用の使い捨て環境なのでglobal設定で問題ない）:
 
-[infra/docs/CODEBUILD_SETUP.md](../../infra/docs/CODEBUILD_SETUP.md)の手順に従い、`futura-infra-deploy-{dev|staging|prod}`を作成。buildspecは`infra/buildspec.yml`を指定。環境変数は以下を設定:
+```bash
+git config --global credential.helper '!aws codecommit credential-helper $@'
+git config --global credential.UseHttpPath true
+cd ~ && git clone https://git-codecommit.ap-northeast-1.amazonaws.com/v1/repos/futura
+```
 
-| 変数名 | 値 |
-|---|---|
-| `ENVIRONMENT` | `dev` / `staging` / `prod` |
-| `AWS_REGION` | `ap-northeast-1` |
-| `PROJECT_NAME` | `futura` |
-| `TF_STATE_BUCKET` | aで作成したバケット名 |
+> Terraformの導入は次のステップの `cloudshell.sh` が自動で行う（`$HOME/bin` に配置）。
+> **CloudShellの `$HOME` は最終利用から120日で削除される。** 消えるのはTerraformバイナリだけで、
+> state本体はS3にあるため、スクリプトを再実行すれば自動で復旧する。
+
+### b. state バケットの指定
+
+`backend.hcl` は**stateファイルではなく、stateの置き場所を指す4行の接続情報**。
+state本体（`terraform.tfstate`）はS3上にあり、`terraform init` 以降は自動で読み書きされる。
+**このファイルは `cloudshell.sh` が環境名から自動生成する**ので手書きは不要。
+
+state バケットが複数ある場合のみ、どれを使うか明示する必要がある:
+
+```bash
+aws s3api list-buckets --query "Buckets[?starts_with(Name, 'futura-terraform-state-')].Name" --output text
+```
+
+複数出た場合は、対象環境のstateを持つバケットを選んで指定する
+（`cloudshell.sh` が各バケットの中身を並べて表示するので、それを見て判断してもよい）:
+
+```bash
+export TF_STATE_BUCKET=futura-terraform-state-<ACCOUNT_ID>-<SUFFIX>
+echo 'export TF_STATE_BUCKET=futura-terraform-state-<ACCOUNT_ID>-<SUFFIX>' >> ~/.bashrc
+```
+
+> ⚠️ **バケットが1つも無い場合（アカウント新設時）のみ** `setup-backend.sh` を実行する。
+> このスクリプトは `date +%s` からバケット名を生成するため、**実行するたびに別名のバケットを作る**。
+> 既存バケットがあるのに実行すると、空のstateを掴んだTerraformが「まだ何も作られていない」と
+> 誤認し、apply時に既存リソースと衝突するか二重作成する。
+> `cloudshell.sh` はこの事故を防ぐため、バケットの**検出のみ**を行い作成はしない。
+
+```bash
+cd ~/futura/infra
+ENVIRONMENT=prod ./setup-backend.sh   # バケットが1つも無いときだけ
+```
 
 ### c. Terraformの実行とoutputsの確認
 
-CodeBuildで「ビルドの開始」を実行。`terraform plan`が新規リソースの`+`（作成）のみであることをログで確認してから`apply`が走る想定（現状の設定は自動承認のため、実行前にリソース差分を必ず目視確認する）。
+```bash
+cd ~/futura/infra
+./cloudshell.sh deploy prod
+```
 
-完了後、ビルドログの`terraform output`セクションから以下を控える:
+スクリプトは以下を順に実行する:
+
+1. 環境名の検証（`dev` / `stg` / `prod` のみ）
+2. Terraform 1.7.5 の導入（未導入時のみ）
+3. state バケットの検出
+4. `backend.hcl` と `terraform.tfvars` を**同じ環境名から生成**（両者の食い違いを防ぐため）
+5. `terraform init` → `terraform plan`
+6. **planに削除・置換が含まれる場合は警告**し、環境名の再入力を要求
+7. 確認プロンプト後に `terraform apply`
+8. `terraform output` を表示
+
+**plan の結果は必ず目視確認する。** 新規環境なら全リソースが `+`（作成）のみのはず。
+`-`（削除）が出る場合は state の向き先が違う可能性が高いので、applyせずに
+`TF_STATE_BUCKET` と環境名を見直すこと。
+
+applyせずにplanだけ見たい場合:
+
+```bash
+./cloudshell.sh plan prod
+```
+
+完了後、以下を控える（`./cloudshell.sh output prod` でいつでも再表示できる）:
+
 - `cognito_user_pool_id`
 - `cognito_user_pool_client_id`
 - `dynamodb_table_names`（9テーブル: users, transactions, market_rates, sessions, permissions, batch_operations, segments, user_segments, invites）
 - `s3_bucket_name`
-- `amplify_ssr_compute_role_arn`（次のeで使用。Amplify Hosting上でAPIルートがDynamoDB/Cognitoを呼び出すために必須）
+- `amplify_ssr_compute_role_arn`（fで使用。Amplify Hosting上でAPIルートがDynamoDB/Cognitoを呼び出すために必須）
 
 ### d. 初期データ投入（Terraformでは管理していないマスタデータ）
 
-DynamoDBテーブル自体はTerraformで作成されるが、以下のレコードはアプリ運用上の初期データとして手動投入が必要（意図的にTerraform管理外としている。理由は[infra/dynamodb/main.tf](../../infra/dynamodb/main.tf)のコメント参照）。
-
-**① 権限テーブル（`futura-{env}-permissions`）** — `administrator` / `user` グループの権限レコード
-
-※管理者（`admin@example.com`）が初回ログインすると、`users`テーブルが空であることを検知して自動的に同期処理が走り（[login.post.ts](../../server/api/auth/login.post.ts) → `syncCognitoToDatabase`）、このレコードは自動投入される。そのため本来は手動投入不要だが、初回ログイン前に権限を確定させておきたい場合や自動同期が失敗した場合のフォールバックとして、以下のコマンドでも投入できる。
+DynamoDBテーブル自体はTerraformで作成されるが、以下のレコードはアプリ運用上の初期データとして
+手動投入が必要（意図的にTerraform管理外としている。理由は[infra/dynamodb/main.tf](../../infra/dynamodb/main.tf)のコメント参照）。
 
 ```bash
-ENV=dev  # 環境に応じて変更
-TABLE="futura-${ENV}-permissions"
-NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-
-aws dynamodb put-item --table-name "$TABLE" --item '{
-  "group_name": {"S": "administrator"},
-  "permissions": {"L": [
-    {"S":"profile:read"},{"S":"profile:update"},{"S":"dashboard:access"},
-    {"S":"transaction:read"},{"S":"transaction:request"},{"S":"account:create-sub"},
-    {"S":"market_rate:read"},{"S":"admin:access"},
-    {"S":"user:create"},{"S":"user:read"},{"S":"user:update"},{"S":"user:delete"},{"S":"profile:approve"},
-    {"S":"group:create"},{"S":"group:read"},{"S":"group:update"},{"S":"group:delete"},
-    {"S":"admin:transaction:read"},{"S":"transaction:create"},{"S":"transaction:approve"},
-    {"S":"market_rate:create"},
-    {"S":"batch:execute"},{"S":"batch:read"},
-    {"S":"segment:create"},{"S":"segment:read"},{"S":"segment:update"},{"S":"segment:delete"},
-    {"S":"invite:create"},{"S":"invite:read"},{"S":"invite:revoke"}
-  ]},
-  "description": {"S": "Full system administrator permissions - all features accessible"},
-  "created_at": {"S": "'"$NOW"'"},
-  "updated_at": {"S": "'"$NOW"'"}
-}'
-
-aws dynamodb put-item --table-name "$TABLE" --item '{
-  "group_name": {"S": "user"},
-  "permissions": {"L": [
-    {"S":"profile:read"},{"S":"profile:update"},{"S":"transaction:read"},
-    {"S":"transaction:request"},{"S":"dashboard:access"},{"S":"market_rate:read"},
-    {"S":"account:create-sub"}
-  ]},
-  "description": {"S": "Standard user permissions"},
-  "created_at": {"S": "'"$NOW"'"},
-  "updated_at": {"S": "'"$NOW"'"}
-}'
+./cloudshell.sh seed prod
 ```
 
-権限一覧の正本は[server/utils/permission-definitions.ts](../../server/utils/permission-definitions.ts)。新しい権限キーが増えた場合はここを更新した上で、既存環境の`administrator`グループにも追加する（下記「2. インフラ・権限構成の変更」を参照）。
+投入されるのは2件:
 
-**② 相場テーブル（`futura-{env}-market-rates`）** — 1BTC=1JPY固定レコード
+**① 権限レコード（`futura-{env}-permissions`）** — `administrator` / `user` グループ
 
-円建て運用のため、相場は固定値1件をシードする。
+権限一覧は[server/utils/permission-definitions.ts](../../server/utils/permission-definitions.ts)の
+`DEFAULT_GROUP_PERMISSIONS` が正本で、**スクリプトは実行時にそこから抽出する**
+（`administrator` は全権限、`user` は同ファイルの `user` 配列）。
+値をスクリプト側に複製していないため、正本に権限を追加すれば自動的に追随する。
 
-```bash
-TABLE="futura-${ENV}-market-rates"
-aws dynamodb put-item --table-name "$TABLE" --item '{
-  "rate_id": {"S": "1704067200"},
-  "timestamp": {"S": "2024-01-01T00:00:00.000Z"},
-  "btc_jpy_rate": {"N": "1"},
-  "created_by": {"S": "system"},
-  "created_at": {"S": "2024-01-01T00:00:00.000Z"}
-}'
+抽出結果は投入前に件数が表示され、`user` の権限が全権限一覧に含まれるかも検証される。
+抽出に失敗した場合は投入せず中断する。
+
+```
+✅ 権限定義を抽出しました: administrator=30件 / user=7件
 ```
 
-管理画面の「相場価格設定」は編集操作を無効化しているため、以後この値が変わることはない。
+> 管理者（`admin@example.com`）が初回ログインすると、`users`テーブルが空であることを検知して
+> 自動的に同期処理が走り（[login.post.ts](../../server/api/auth/login.post.ts) → `syncCognitoToDatabase`）、
+> このレコードは自動投入される。そのため本来は手動投入不要だが、初回ログイン前に権限を
+> 確定させておきたい場合や、自動同期が失敗した場合のフォールバックとして使う。
 
-### e. Amplifyアプリの作成
+**② 相場レコード（`futura-{env}-market-rates`）** — 1BTC=1JPY固定
 
-環境ごとに1つのAmplifyアプリを作成する（`futura-dev` / `futura-stg` / `futura-prod`）。
+円建て運用のため、相場は固定値1件をシードする。管理画面の「相場価格設定」は編集操作を
+無効化しているため、以後この値が変わることはない。
 
-1. Amplifyコンソールで「新規アプリの作成」→ GitHubリポジトリ・対象ブランチ（例: dev環境なら`develop`ブランチ）を接続
+> 権限キーを追加した場合は、既存環境の`administrator`グループにも反映が必要。
+> 「2-2. インフラ・権限構成の変更」を参照。
+
+### e. `.env.{STAGE}` の確認
+
+[amplify.yml](../../amplify.yml) は `STAGE` 環境変数を見て `.env.dev` / `.env.stg` / `.env.prod` を
+`.env` にコピーしてからビルドする。cで確認したテーブル名・バケット名が
+対象ファイルの内容と一致しているか確認し、違う場合は修正してCodeCommitへpushする。
+
+> CognitoのIDは `.env.*` には書かない。Amplifyの環境変数で管理する（fを参照）。
+
+> ⚠️ **`UPLOADS_BUCKET_NAME` でS3バケット名をカスタマイズした場合は、
+> `.env.{STAGE}` の `NUXT_S3_UPLOADS_BUCKET` も同じ値に直すこと。**
+> Terraformが作るバケットと `.env` の記載がずれると、アップロードが失敗する。
+
+#### 画像配信URL（`NUXT_IMAGE_BASE_URL`）
+
+**このリポジトリは公開されているため、`.env.*` の `NUXT_IMAGE_BASE_URL` は
+`https://resource.futura.example.com` というプレースホルダになっている。**
+実値はAmplifyの環境変数で上書きする（fを参照）。
+
+⚠️ **この値には前提となるインフラがあり、Terraform管理外**:
+
+- アップロード用S3バケットは完全にプライベート（[infra/s3/main.tf](../../infra/s3/main.tf) で
+  パブリックアクセスを4項目とも遮断）
+- そのため画像配信にはバケットを origin とする**CloudFrontディストリビューションが必要**
+- **Terraformはこれを作らない。** 環境ごとに手動作成する
+  （dev環境は `dev.resource.futura.wakwak-oripa.com` → `futura-dev-uploads` の構成で手動作成済み）
+
+設定しないまま運用すると、[upload/image.post.ts](../../server/api/upload/image.post.ts) が
+`Image base URL is not configured` で500を返す。プレースホルダのまま設定した場合は
+アップロード自体は成功するが、**保存されるURLが解決できずプロフィール画像とロゴが表示されない**。
+
+> 将来的にはこのCloudFrontもTerraform管理に入れるべき箇所。
+
+### f. Amplifyアプリの作成
+
+環境ごとに1つのAmplifyアプリを作成する（`futura-stg` / `futura-prod`）。
+**いずれも同じCodeCommitリポジトリ `futura` に接続し、ブランチだけを変える。**
+
+| Amplifyアプリ | 接続ブランチ | `STAGE` |
+|---|---|---|
+| `futura-prod` | `main` | `prod` |
+| `futura-stg` | `stg` | `stg` |
+
+> ブランチが環境ごとに分かれているため、`stg` へのpushでprodがビルドされることはない。
+> 逆に、**同じブランチに2つ以上のAmplifyアプリを接続すると1回のpushで両方がビルドされる**ので、
+> 環境を追加する際は必ず別ブランチを割り当てること。
+
+1. Amplifyコンソールで「新規アプリの作成」→ **AWS CodeCommit** を選択 → `futura` リポジトリの**対象環境のブランチ**（prodなら `main`、stgなら `stg`）を接続
 2. ビルド設定は自動検出された`amplify.yml`（リポジトリ直下）をそのまま使用
 3. **SSR Compute roleの割り当て（必須）**：`server/api/**`はAmplify Hosting Compute上で動作するが、これはTerraformが作る`lambda_execution`ロール（未使用のプレースホルダーLambda専用）とは別物で、割り当てないとDynamoDB/Cognitoへのアクセスが一切できずログイン等が失敗する（`Could not load credentials from any providers`）。
    - アプリ作成後、「App settings」→「IAM roles」→「Compute role」→「Edit」
@@ -144,40 +264,103 @@ aws dynamodb put-item --table-name "$TABLE" --item '{
    | `STAGE` | `dev` / `stg` / `prod`（amplify.ymlが`.env.{STAGE}`を読み分ける） |
    | `NUXT_PUBLIC_COGNITO_USER_POOL_ID` | cで控えたCognito User Pool ID |
    | `NUXT_PUBLIC_COGNITO_CLIENT_ID` | cで控えたCognito Client ID |
+   | `NUXT_IMAGE_BASE_URL` | 画像配信用CloudFrontのURL（eを参照）。`.env.*` のプレースホルダを上書きする |
 
-5. 「詳細設定」→「Server-Side Rendering (SSR) deployment」で **Enable SSR app logs** を有効化（Nuxtのアダプター経由デプロイのため明示的な有効化が必須。これはCompute roleとは別の、ログ配信用のAmplifyサービスロール）
+5. 「詳細設定」→「Server-Side Rendering (SSR) deployment」で **Enable SSR app logs** を有効化（Nuxtのアダプター経由デプロイのため明示的な有効化が必須。これはCompute roleとは別の、ログ配信用のAmplifyサービスロール）。**これを忘れるとサーバー側のエラーが一切見えず、初回デプロイの障害切り分けができなくなる。**
 6. 保存してデプロイを実行
 
-### f. 動作確認
+### g. 動作確認
 
 1. ビルドログで`.amplify-hosting/`が生成され、`deploy-manifest.json`のルーティングにエラーがないことを確認
-2. デプロイ後のURLにアクセスし、ログイン画面が表示されることを確認
+2. デプロイ後のURL（`https://{branch}.{appId}.amplifyapp.com`）にアクセスし、ログイン画面が表示されることを確認
 3. 初期管理者アカウント（`admin@example.com` / `TempAdmin123!`）でログインし、ダッシュボード・管理画面が表示されることを確認
 
-### g. セキュリティ対応（本番環境は特に必須）
+### h. セキュリティ対応（本番環境は特に必須）
 
 - 初期パスワード（`admin@example.com`）を変更
 - テストユーザー（`user@example.com`、存在する場合）を削除または無効化
 - Amplifyアプリのアクセス制御（Basic認証等）を必要に応じて設定
 
-## 2. インフラ・権限構成の変更（既存環境への変更）
+---
 
-1. `infra/`配下の`.tf`ファイルを編集し、PRでレビュー
-2. マージ後、対象環境のCodeBuildプロジェクト（`futura-infra-deploy-{env}`）で「ビルドの開始」を実行
-3. ビルドログの`terraform plan`結果を確認（想定外の削除・置換が出ていないか必ず目視）— 現状`-auto-approve`のため、plan確認はapply前のこのタイミングでしか行えない
-4. 権限キーを追加した場合（`permission-definitions.ts`変更時）は、管理画面の「グループ管理」→ 対象グループ → 権限編集から手動で追加する（`administrator`グループは全権限、`user`グループは必要な範囲のみ）。DynamoDBを直接`update-item`しても良い
-5. 複数環境がある場合は dev → stg → prod の順に反映し、各段階で動作確認する
+## 2. 継続デプロイ
 
-## 3. アプリケーションデプロイ
+### 2-1. アプリケーションの変更（日常運用）
 
-- **通常運用**: 各環境に対応するブランチへpush/mergeすると、Amplifyが自動的にビルド・デプロイする（dev/stg/prod共通、本番も自動デプロイ）
-- **ビルド状況の確認**: Amplifyコンソールの対象アプリ →「ホスティング」→ ビルド履歴からログを確認
-- **ロールバック**: Amplifyコンソールの「ホスティング」→ 過去のデプロイを選択して「このバージョンを再デプロイ」。DynamoDB/Cognito側のインフラはTerraform state（S3のバージョニング）から復元
-- **環境変数の変更**: Amplifyコンソールの「環境変数」から変更後、再デプロイが必要（自動では反映されない）
+操作端末からCodeCommitの**対象環境のブランチ**へpushするだけ。Amplifyが自動でビルド・デプロイする。
+
+- stgへ反映: `stg` ブランチへpush
+- prodへ反映: `stg` で検証後、`main` へマージ
+
+> ブランチが分かれているため、`stg` へのpushがprodに波及することはない。
+
+- **ビルド状況の確認**: Amplifyコンソール → 対象アプリ →「ホスティング」→ ビルド履歴
+- **環境変数の変更**: Amplifyコンソールの「環境変数」から変更後、**再デプロイが必要**（自動では反映されない）
+
+> GitHub等を併用している場合、**CodeCommitへのpushを忘れるとデプロイされない**点に注意。
+
+### 2-2. インフラ・権限構成の変更
+
+1. `infra/`配下の`.tf`ファイルを編集し、レビューを経て**対象環境のブランチ**へマージ
+   （stgなら `stg`、prodなら `main`）
+
+   > リポジトリが全環境で1つのため、**チェックアウトしているブランチが適用対象のコードを決める**。
+   > `cloudshell.sh` は環境とブランチの食い違いを検知して確認を求めるが、
+   > 未コミットの変更はそのまま適用される点に注意（こちらは警告のみ）。
+2. CloudShellで最新を取得してデプロイ:
+
+   ```bash
+   cd ~/futura && git checkout <対象環境のブランチ> && git pull   # prod:main / stg:stg
+   cd infra && ./cloudshell.sh deploy prod
+   ```
+
+   `backend.hcl` はgit管理外だが、スクリプトが毎回生成するので手当ては不要。
+
+3. **`terraform plan` の結果を目視確認**（想定外の削除・置換が出ていないか）してから
+   確認プロンプトに `y` を入力する。削除が含まれる場合はスクリプトが警告し、
+   環境名の再入力を求めてくる。
+
+4. 権限キーを追加した場合（`permission-definitions.ts`変更時）は、既存環境の権限レコードにも反映が必要:
+
+   ```bash
+   ./cloudshell.sh seed <env>
+   ```
+
+   スクリプトが正本から抽出し直すため、追加した権限が `administrator` に入る。
+
+   > ⚠️ **`seed` は `put-item` でレコード全体を上書きする。**
+   > 管理画面の「グループ管理」でグループの権限を個別にカスタマイズしている場合、
+   > その変更は正本の内容で置き換えられる。カスタマイズを維持したい環境では、
+   > 管理画面から対象グループの権限を手動で追加すること
+5. **必ず stg → prod の順**に反映し、各段階で動作確認する（`stg` で確認してから `main` へマージ）
+
+### 2-3. ロールバック
+
+- **アプリ**: Amplifyコンソールの「ホスティング」→ 過去のデプロイを選択して「このバージョンを再デプロイ」
+- **インフラ**: `.tf`を戻してCodeCommitへpush → 2-2の手順でapply。stateはS3のバージョニングから復元可能
+
+---
+
+## 3. 将来: インフラデプロイのCodeBuild移行
+
+現状はCloudShellでTerraformを実行している。以下のいずれかを満たした時点でCodeBuildへの移行を検討する:
+
+- **applyできる人を絞りたくなった** — CloudShellの権限はコンソールログイン者の権限そのもので、`iam:CreateRole` 等の強権限が必要になる。CodeBuildならサービスロールに閉じ込め、人間は `codebuild:StartBuild` だけで済む
+- **運用者が2人以上になった** — state lockが必須になる（1-b参照）
+- **applyの監査証跡が必要になった** — CloudTrailはAPI単位でしか残らず、plan差分は残らない
+
+移行用の [infra/buildspec.yml](../../infra/buildspec.yml) は作成済み。ただし移行前に以下の是正が必要:
+
+- `build`フェーズが `terraform apply -auto-approve` を直書きしているため、pushトリガーにすると**無条件applyが走る**。plan専用とapply専用でプロジェクトを分けるか、applyは手動`start-build`に限定する
+- `artifacts` の `infra/terraform.tfstate` と `reports` の `infra/**/*` は**stateの機密情報が漏れる経路**になるため除外する
+
+詳細は [infra/docs/CODEBUILD_SETUP.md](../../infra/docs/CODEBUILD_SETUP.md) を参照。
+
+---
 
 ## トラブルシューティング
 
-インフラ（Terraform/CodeBuild）関連のエラーは[infra/README.md](../../infra/README.md#トラブルシューティング)・[infra/docs/CODEBUILD_SETUP.md](../../infra/docs/CODEBUILD_SETUP.md#トラブルシューティング)を参照。
+インフラ（Terraform）関連のエラーは[infra/README.md](../../infra/README.md#トラブルシューティング)を参照。
 
 Amplifyビルドが失敗する場合、まず以下を確認:
 - `STAGE`環境変数が設定されているか（未設定だとdev扱いになる）
@@ -187,5 +370,15 @@ Amplifyビルドが失敗する場合、まず以下を確認:
 
 ログイン・DynamoDB書き込み・Cognitoのグループ取得など、AWS SDKを使う処理全般が失敗する。一方でCognitoの`InitiateAuth`（ログイン自体）は成功する、という組み合わせで発生する場合、**SSR Compute roleが未割り当て**が原因。`InitiateAuth`/`RespondToAuthChallenge`はIAM認証不要のCognito公開APIのため素通りするが、`AdminListGroupsForUser`等のAdmin系APIやDynamoDBは必ずIAM認証が必要なため、Compute role未割り当てだと即座にこのエラーになる。
 
-**対処**: 上記「e. Amplifyアプリの作成」手順3の通り、`terraform output amplify_ssr_compute_role_arn`のロールをAmplifyアプリの「App settings」→「IAM roles」→「Compute role」に割り当てる（既存環境で未対応の場合は今すぐ対応が必要）。
+**対処**: 上記「1-f. Amplifyアプリの作成」手順3の通り、`terraform output amplify_ssr_compute_role_arn`のロールをAmplifyアプリの「App settings」→「IAM roles」→「Compute role」に割り当てる。
 - SSRログが有効な場合、CloudWatch Logsで`.amplify-hosting/compute/default`側のランタイムエラーを確認
+
+### エラー: `Invalid value for variable` / `Environment must be one of: dev, stg, prod`
+
+環境名が `dev` / `stg` / `prod` 以外になっている（[infra/variables.tf](../../infra/variables.tf)）。
+`staging` ではなく `stg` が正しい。
+
+### `terraform plan` に想定外の削除・置換が出る
+
+`backend.hcl` の `key` が別環境を指している可能性が高い。**applyせずに** `key` が
+`futura/{対象環境}/terraform.tfstate` になっているか確認する。

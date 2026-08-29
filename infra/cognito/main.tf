@@ -97,22 +97,10 @@ resource "aws_cognito_user_pool_client" "main" {
     "ALLOW_USER_SRP_AUTH"
   ]
 
-  # OAuth設定
-  supported_identity_providers = ["COGNITO"]
-  
-  callback_urls = [
-    "http://localhost:3000/auth/callback",
-    "https://${var.project_name}-${var.environment}.amplifyapp.com/auth/callback"
-  ]
-  
-  logout_urls = [
-    "http://localhost:3000/",
-    "https://${var.project_name}-${var.environment}.amplifyapp.com/"
-  ]
-
-  allowed_oauth_flows = ["code"]
-  allowed_oauth_scopes = ["email", "openid", "profile"]
-  allowed_oauth_flows_user_pool_client = true
+  # Hosted UI（OAuth authorization codeフロー）は使用しない。
+  # 認証は server/api/auth/login.post.ts の InitiateAuth (USER_PASSWORD_AUTH) で
+  # 完結しており、Nuxtサーバーが直接Cognito APIを叩く。未使用の認証経路を
+  # 公開しないため、OAuth関連の設定とユーザープールドメインは意図的に持たない。
 
   # ユーザー存在エラーの防止
   prevent_user_existence_errors = "ENABLED"
@@ -120,13 +108,6 @@ resource "aws_cognito_user_pool_client" "main" {
   # 読み取り・書き込み属性
   read_attributes  = ["email", "name", "email_verified"]
   write_attributes = ["email", "name"]
-}
-
-# Cognito ユーザープールドメイン
-# Domain name can be overridden via cognito_domain variable to ensure uniqueness
-resource "aws_cognito_user_pool_domain" "main" {
-  domain       = var.cognito_domain != "" ? var.cognito_domain : "${var.project_name}-${var.environment}-auth"
-  user_pool_id = aws_cognito_user_pool.main.id
 }
 
 # Cognito グループ

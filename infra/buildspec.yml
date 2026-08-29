@@ -10,7 +10,6 @@ version: 0.2
 #
 # オプションの環境変数:
 #   - UPLOADS_BUCKET_NAME: S3アップロードバケット名のカスタマイズ (グローバルにユニークな名前が必要)
-#   - COGNITO_DOMAIN: Cognito User Pool Domainのカスタマイズ (リージョン内でユニークな名前が必要)
 
 env:
   variables:
@@ -96,12 +95,6 @@ phases:
         if [ -n "$UPLOADS_BUCKET_NAME" ]; then
           echo "uploads_bucket_name = \"$UPLOADS_BUCKET_NAME\"" >> terraform.tfvars
           echo "✅ Custom S3 bucket name: $UPLOADS_BUCKET_NAME"
-        fi
-
-        # オプション: COGNITO_DOMAIN環境変数が設定されている場合のみ追加
-        if [ -n "$COGNITO_DOMAIN" ]; then
-          echo "cognito_domain = \"$COGNITO_DOMAIN\"" >> terraform.tfvars
-          echo "✅ Custom Cognito domain: $COGNITO_DOMAIN"
         fi
 
         cat terraform.tfvars

@@ -1,6 +1,19 @@
 #!/bin/bash
 
 # M・S CFD App Infrastructure Deployment Script
+#
+# ⚠️ 非推奨: CloudShellで実行する場合は cloudshell.sh を使うこと。
+#
+# このスクリプトには CloudShell 運用と相性の悪い挙動が2つある:
+#   1. backend.hcl が無いと setup-backend.sh を自動実行する。backend.hcl は
+#      git管理外のため CloudShell の新規セッションでは常に不在であり、
+#      実行するたびに新しい state バケットが作られてしまう。
+#   2. terraform.tfvars も git管理外のため example からコピーされ、
+#      environment が常に dev になる。prod 用の backend.hcl と組み合わさると
+#      prod の state に dev の構成を書き込む事故につながる。
+#
+# cloudshell.sh は環境名を引数で受け取り、backend.hcl と terraform.tfvars を
+# 同じ値から生成することでこの乖離を防いでいる。
 
 set -e
 
