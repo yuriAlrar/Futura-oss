@@ -113,7 +113,7 @@
 
         <template #[`item.running_balance`]="{ item }">
           <span class="font-mono text-sm text-gray-600">
-            {{ formatBTC(getRunningBalance(item)) }} BTC
+            {{ formatBTC(item.running_balance) }} BTC
           </span>
         </template>
 
@@ -129,17 +129,14 @@
 </template>
 
 <script setup lang="ts">
-import type { Transaction } from '~/types'
+import type { Transaction, PaginatedResponse, TransactionStats, TransactionWithBalance } from '~/types'
 import {
   getTransactionTypeLabel,
   getTransactionTypeColor as getTransactionTypeColorUtil,
   getTransactionTypeIcon,
   getTransactionTypeTextColor,
   getTransactionTypeSign,
-  getTransactionTypeVuetifyColor,
-  isApprovedTransaction,
-  calculateBtcSum,
-  reduceTransactionsBtc
+  getTransactionTypeVuetifyColor
 } from '~/utils/transaction'
 import { formatBTC } from '~/utils/format'
 
@@ -158,7 +155,8 @@ const { user } = useAuth()
 const { showError } = useNotification()
 
 // State
-const transactions = ref<Transaction[]>([])
+const transactions = ref<TransactionWithBalance[]>([])
+const stats = ref<TransactionStats | null>(null)
 const loading = ref(false)
 const selectedTransactionType = ref('all')
 const selectedStatus = ref('all')
@@ -220,21 +218,19 @@ const filteredTransactions = computed(() => {
   return filtered
 })
 
-const totalTransactions = computed(() => transactions.value.length)
+// 統計値はサーバが全件を対象に算出した stats を使う。
+// 取得済みの items から集計すると1ページ分しか数えられず、数値がずれる。
+const totalTransactions = computed(() => stats.value?.totalCount ?? 0)
 
-const totalDeposits = computed(() => reduceTransactionsBtc(transactions.value, 'deposit'))
-const totalWithdrawals = computed(() => reduceTransactionsBtc(transactions.value, 'withdrawal'))
+const totalDeposits = computed(() => stats.value?.totalDeposits ?? 0)
+const totalWithdrawals = computed(() => stats.value?.totalWithdrawals ?? 0)
 
 // 承認済み統計
-const approvedTransactionsList = computed(() => transactions.value.filter(t => isApprovedTransaction(t)))
+const approvedTransactionCount = computed(() => stats.value?.approvedCount ?? 0)
+const approvedDeposits = computed(() => stats.value?.approvedDeposits ?? 0)
+const approvedWithdrawals = computed(() => stats.value?.approvedWithdrawals ?? 0)
 
-const approvedTransactionCount = computed(() => approvedTransactionsList.value.length)
-const approvedDeposits = computed(() => reduceTransactionsBtc(approvedTransactionsList.value, 'deposit'))
-const approvedWithdrawals = computed(() => reduceTransactionsBtc(approvedTransactionsList.value, 'withdrawal'))
-
-const pendingTransactionCount = computed(() => {
-  return transactions.value.filter(t => t.status === 'pending').length
-})
+const pendingTransactionCount = computed(() => stats.value?.pendingCount ?? 0)
 
 // Methods
 const loadTransactions = async () => {
@@ -243,14 +239,15 @@ const loadTransactions = async () => {
   loading.value = true
   try {
     logger.debug('取引履歴を読み込み中...', { userId: user.value.user_id })
-    const response = await apiClient.get<{ items: Transaction[] }>(
+    const response = await apiClient.get<PaginatedResponse<TransactionWithBalance, TransactionStats>>(
       `/transactions?user_id=${user.value.user_id}`
     )
     logger.debug('APIレスポンス:', response)
 
     if (response.success && response.data && response.data.items) {
       transactions.value = response.data.items
-      logger.info(`取引履歴を${response.data.items.length}件読み込みました`)
+      stats.value = response.data.stats ?? null
+      logger.info(`取引履歴を${response.data.items.length}件読み込みました (全体: ${response.data.stats?.totalCount ?? 0}件)`)
     } else {
       logger.warn('APIレスポンスが期待通りの形式ではありません:', response)
       showError('取引履歴のデータ形式に問題があります')
@@ -274,30 +271,6 @@ const loadTransactions = async () => {
   } finally {
     loading.value = false
   }
-}
-
-const getRunningBalance = (targetItem: Transaction) => {
-  // すべての履歴（transactions.value）からこの取引の実際のインデックスを探す
-  const targetIndex = transactions.value.findIndex(t => t.transaction_id === targetItem.transaction_id)
-  if (targetIndex === -1) return 0
-
-  const amountsToSum: number[] = []
-
-  // transactions.value は新しいものが配列の先頭(index: 0)に来るため、
-  // 一番古いもの(length - 1)から、対象の取引(targetIndex)まで遡って拾う
-  for (let i = transactions.value.length - 1; i >= targetIndex; i--) {
-    const transaction = transactions.value[i]
-
-    // 承認済み取引のみ残高に反映
-    if (isApprovedTransaction(transaction)) {
-      if (['deposit', 'withdrawal', 'asset_management'].includes(transaction.transaction_type)) {
-        amountsToSum.push(transaction.amount) // withdrawal はマイナス値なのでそのままPush
-      }
-    }
-  }
-
-  // 浮動小数点誤差を防ぐ共通関数で合算する
-  return calculateBtcSum(amountsToSum)
 }
 
 const viewTransactionDetails = (transaction: Transaction) => {

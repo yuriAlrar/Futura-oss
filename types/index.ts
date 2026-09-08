@@ -148,12 +148,82 @@ export interface ApiResponse<T> {
   message?: string
 }
 
-export interface PaginatedResponse<T> {
+export interface PaginatedResponse<T, S = undefined> {
   items: T[]
   total: number
   page: number
   limit: number
   hasMore: boolean
+  /**
+   * 現在ページではなく、条件に一致する全件を対象としたサーバサイド集計値。
+   * 画面の統計カードは必ずこの値を使うこと（items から集計すると
+   * 現在ページ分しか数えられず数値がずれる）。
+   */
+  stats?: S
+}
+
+// ----------------------------------------------------------------------------
+// サーバサイド集計（stats）の型定義
+// ----------------------------------------------------------------------------
+
+/** 取引履歴（ユーザー向け）の全件集計 */
+export interface TransactionStats {
+  totalCount: number
+  totalDeposits: number
+  totalWithdrawals: number
+  approvedCount: number
+  approvedDeposits: number
+  approvedWithdrawals: number
+  pendingCount: number
+}
+
+/** 取引履歴（管理者向け）の全件集計。取引種別・ステータス等の絞り込みは適用後の値 */
+export interface AdminTransactionStats {
+  totalCount: number
+  pendingCount: number
+  todayCount: number
+  todayDeposits: number
+  todayWithdrawals: number
+  todayApprovedCount: number
+  todayApprovedDeposits: number
+  todayApprovedWithdrawals: number
+}
+
+/** ユーザー一覧の全件集計。プロフィール承認状態の絞り込みは適用前の値 */
+export interface UserStats {
+  totalCount: number
+  profileApprovedCount: number
+  profilePendingCount: number
+}
+
+/** 入出金リクエスト（ユーザー向け）の全件集計。ステータス絞り込みは適用前の値 */
+export interface TransactionRequestStats {
+  totalCount: number
+  pendingCount: number
+  approvedCount: number
+  rejectedCount: number
+}
+
+/** 入出金リクエスト（管理者向け）の全件集計。ステータス絞り込みは適用前の値 */
+export interface AdminTransactionRequestStats {
+  totalCount: number
+  pendingCount: number
+  todayApprovedCount: number
+  todayRejectedCount: number
+}
+
+/** 残高推移付きの取引。running_balance はページング前の全取引を基準に算出した値 */
+export interface TransactionWithBalance extends Transaction {
+  user_name: string
+  user_email: string
+  running_balance: number
+}
+
+/** 相場レート一覧の全件集計 */
+export interface MarketRateStats {
+  totalCount: number
+  todayUpdateCount: number
+  monthlyChangePercent: number
 }
 
 // Form types

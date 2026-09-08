@@ -164,7 +164,7 @@
 </template>
 
 <script setup lang="ts">
-import type { MarketRate, CSVUploadResponse } from '~/types'
+import type { MarketRate, CSVUploadResponse, PaginatedResponse, MarketRateStats } from '~/types'
 
 definePageMeta({
   middleware: 'auth',
@@ -182,6 +182,7 @@ const apiClient = useApiClient()
 
 // State
 const rates = ref<MarketRate[]>([])
+const stats = ref<MarketRateStats | null>(null)
 const latestRate = ref<MarketRate | null>(null)
 const loading = ref(false)
 const showCreateDialog = ref(false)
@@ -199,29 +200,11 @@ const headers = [
 ]
 
 // Computed
-const todayUpdateCount = computed(() => {
-  const today = new Date().toDateString()
-  return rates.value.filter(rate => 
-    new Date(rate.created_at).toDateString() === today
-  ).length
-})
+// 統計値はサーバが全件を対象に算出した stats を使う。
+// 取得済みの items から集計すると1ページ分しか対象にできず、数値がずれる。
+const todayUpdateCount = computed(() => stats.value?.todayUpdateCount ?? 0)
 
-const monthlyChangePercent = computed(() => {
-  if (rates.value.length < 2) return 0
-
-  const thirtyDaysAgo = new Date()
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-
-  const recent = rates.value[0]
-  const monthAgo = rates.value.find(rate => 
-    new Date(rate.timestamp) <= thirtyDaysAgo
-  )
-
-  if (!monthAgo) return 0
-
-  const change = ((recent.btc_jpy_rate - monthAgo.btc_jpy_rate) / monthAgo.btc_jpy_rate) * 100
-  return Math.round(change * 100) / 100
-})
+const monthlyChangePercent = computed(() => stats.value?.monthlyChangePercent ?? 0)
 
 const monthlyChangeClass = computed(() => {
   const change = monthlyChangePercent.value
@@ -230,14 +213,14 @@ const monthlyChangeClass = computed(() => {
   return 'text-gray-600'
 })
 
-const totalRecords = computed(() => rates.value.length)
+const totalRecords = computed(() => stats.value?.totalCount ?? rates.value.length)
 
 // Methods
 const loadRates = async () => {
   loading.value = true
   try {
     const [ratesResponse, latestResponse] = await Promise.all([
-      apiClient.get<{ items: MarketRate[] }>('/market-rates'),
+      apiClient.get<PaginatedResponse<MarketRate, MarketRateStats>>('/market-rates'),
       apiClient.get<MarketRate>('/market-rates/latest')
     ])
 
@@ -245,6 +228,7 @@ const loadRates = async () => {
     console.log('latestResponse', latestResponse)
 
     rates.value = ratesResponse.data!.items
+    stats.value = ratesResponse.data!.stats ?? null
     latestRate.value = latestResponse.data || null
   } catch (error) {
     logger.error('相場データの読み込みに失敗しました:', error)

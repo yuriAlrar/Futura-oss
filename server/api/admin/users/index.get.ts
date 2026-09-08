@@ -1,6 +1,6 @@
 import { getDynamoDBService } from '~/server/utils/dynamodb'
 import { useLogger } from '~/composables/useLogger'
-import type { User, PaginatedResponse } from '~/types'
+import type { User, PaginatedResponse, UserStats } from '~/types'
 
 type DynamoDBValue = string | number | boolean | null | DynamoDBValue[] | { [key: string]: DynamoDBValue }
 type DynamoDBRecord = Record<string, DynamoDBValue>
@@ -33,13 +33,8 @@ export default defineEventHandler(async (event) => {
       expressionAttributeValues[':status'] = status
     }
 
-    if (profileApproved === 'approved') {
-      filterExpression += ' AND profile_approved = :true'
-      expressionAttributeValues[':true'] = true
-    } else if (profileApproved === 'pending') {
-      filterExpression += ' AND (attribute_not_exists(profile_approved) OR profile_approved = :false)'
-      expressionAttributeValues[':false'] = false
-    }
+    // profile_approved による絞り込みはDynamoDB側では行わない。
+    // 承認済み/未承認の件数を両方集計する必要があるため、取得後にメモリ上で絞り込む。
     
     // 検索機能のサポート
     if (search) {
@@ -59,21 +54,37 @@ export default defineEventHandler(async (event) => {
       // フロントエンドで総数が必要なため、ここでは制限をかけない
     })
 
-    const users = (result.items as User[]).sort((a, b) => 
+    const allUsers = (result.items as User[]).sort((a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     )
-    
+
+    // 統計値は profile_approved の絞り込み前の全件が対象（現在ページではない）
+    const stats: UserStats = {
+      totalCount: allUsers.length,
+      profileApprovedCount: allUsers.filter(user => user.profile_approved).length,
+      profilePendingCount: allUsers.filter(user => !user.profile_approved).length
+    }
+
+    // ここから先は一覧表示用の絞り込み
+    let users = allUsers
+    if (profileApproved === 'approved') {
+      users = users.filter(user => user.profile_approved)
+    } else if (profileApproved === 'pending') {
+      users = users.filter(user => !user.profile_approved)
+    }
+
     // ページネーションロジック
     const startIndex = (page - 1) * limit
     const endIndex = startIndex + limit
     const paginatedUsers = users.slice(startIndex, endIndex)
 
-    const response: PaginatedResponse<User> = {
+    const response: PaginatedResponse<User, UserStats> = {
       items: paginatedUsers,
       total: users.length,
       page,
       limit,
-      hasMore: endIndex < users.length
+      hasMore: endIndex < users.length,
+      stats
     }
     
     logger.info(`ユーザー取得完了: 総数${users.length}件, 返却${paginatedUsers.length}件 (page: ${page}, limit: ${limit})`)

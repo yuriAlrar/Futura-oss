@@ -107,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import type { User, PaginatedResponse } from '~/types'
+import type { User, PaginatedResponse, UserStats } from '~/types'
 
 definePageMeta({
   middleware: 'auth',
@@ -126,6 +126,7 @@ const apiClient = useApiClient()
 // State
 const users = ref<User[]>([])
 const totalCount = ref(0)
+const stats = ref<UserStats | null>(null)
 const loading = ref(false)
 const itemsPerPage = ref(20)
 const page = ref(1)
@@ -157,15 +158,13 @@ const headers = [
 // 算出プロパティ（Computed）
 // サーバーサイドフィルタリングに移行するため削除
 
-const pendingCount = computed(() =>
-  users.value.filter(user => !user.profile_approved && user.status !== 'deleted').length
-)
+// 統計値はサーバが全件を対象に算出した stats を使う。
+// 取得済みの items から集計すると1ページ分しか数えられず、数値がずれる。
+const pendingCount = computed(() => stats.value?.profilePendingCount ?? 0)
 
-const approvedCount = computed(() =>
-  users.value.filter(user => user.profile_approved && user.status !== 'deleted').length
-)
+const approvedCount = computed(() => stats.value?.profileApprovedCount ?? 0)
 
-const totalUsers = computed(() => totalCount.value)
+const totalUsers = computed(() => stats.value?.totalCount ?? totalCount.value)
 
 // Methods
 const loadUsers = async () => {
@@ -182,10 +181,11 @@ const loadUsers = async () => {
       params.search = searchQuery.value.trim()
     }
 
-    const response = await apiClient.get<PaginatedResponse<User>>('/admin/users', { params })
+    const response = await apiClient.get<PaginatedResponse<User, UserStats>>('/admin/users', { params })
     const data = response.data!
     users.value = data.items
     totalCount.value = data.total
+    stats.value = data.stats ?? null
   } catch (error) {
     logger.error('ユーザー一覧の読み込みに失敗しました:', error)
     showError('ユーザー一覧の取得に失敗しました')

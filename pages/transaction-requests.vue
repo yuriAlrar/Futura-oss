@@ -201,8 +201,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import type { Transaction } from '~/types'
-import { TRANSACTION_STATUS } from '~/types'
+import type { Transaction, PaginatedResponse, TransactionRequestStats } from '~/types'
 import { getTransactionTypeLabel, getTransactionTypeColor } from '~/utils/transaction'
 import { formatBTC } from '~/utils/format'
 
@@ -225,6 +224,7 @@ const selectedTransactionType = ref('all') // デフォルトですべての取�
 const page = ref(1)
 const limit = ref(20)
 const totalCount = ref(0)
+const stats = ref<TransactionRequestStats | null>(null)
 const hasMore = ref(false)
 const currentRate = ref(0)
 const showRequestDialog = ref(false)
@@ -245,17 +245,13 @@ const transactionTypeOptions = [
 ]
 
 // Computed
-const pendingCount = computed(() => {
-  return requests.value.filter(r => r.status === TRANSACTION_STATUS.PENDING).length
-})
+// 統計値はサーバが全ステータスの全件を対象に算出した stats を使う。
+// 取得済みの items から集計すると現在ページ・現在の絞り込み分しか数えられず、数値がずれる。
+const pendingCount = computed(() => stats.value?.pendingCount ?? 0)
 
-const approvedCount = computed(() => {
-  return requests.value.filter(r => !r.status || r.status === TRANSACTION_STATUS.APPROVED).length
-})
+const approvedCount = computed(() => stats.value?.approvedCount ?? 0)
 
-const totalRequestCount = computed(() => {
-  return totalCount.value // APIから取得した総件数を使用
-})
+const totalRequestCount = computed(() => stats.value?.totalCount ?? 0)
 
 const hasPendingRequest = computed(() => {
   return pendingCount.value > 0
@@ -265,7 +261,7 @@ const hasPendingRequest = computed(() => {
 const loadRequests = async () => {
   loading.value = true
   try {
-    const response = await apiClient.get<{ items: Transaction[]; total: number; hasMore: boolean }>('/transaction-requests', {
+    const response = await apiClient.get<PaginatedResponse<Transaction, TransactionRequestStats>>('/transaction-requests', {
       params: {
         status: selectedStatus.value,
         transaction_type: selectedTransactionType.value,
@@ -277,6 +273,7 @@ const loadRequests = async () => {
     // 資産運用タイプを除外
     requests.value = response.data!.items.filter(item => item.transaction_type !== 'asset_management')
     totalCount.value = response.data!.total
+    stats.value = response.data!.stats ?? null
     hasMore.value = response.data!.hasMore
   } catch (error: any) {
     logger.error('リクエスト取得エラー:', error)

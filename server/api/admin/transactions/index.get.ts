@@ -1,6 +1,9 @@
 import { getDynamoDBService } from '~/server/utils/dynamodb'
+import { isApprovedTransaction } from '~/server/utils/transaction-helpers'
+import { sumTransactionsBtc, toStatsDateString, todayStatsDateString } from '~/server/utils/stats-helpers'
 import { useLogger } from '~/composables/useLogger'
-import type { Transaction, User, PaginatedResponse } from '~/types'
+import type { Transaction, User, PaginatedResponse, AdminTransactionStats } from '~/types'
+import { TRANSACTION_STATUS } from '~/types'
 
 type EnrichedTransaction = Transaction & {
   user_name: string
@@ -71,6 +74,22 @@ export default defineEventHandler(async (event) => {
       logger.debug('ステータスフィルタ適用後:', { status, count: transactions.length })
     }
 
+    // 統計値は絞り込み後の全件が対象（現在ページではない）
+    const today = todayStatsDateString()
+    const todayTransactions = transactions.filter(t => toStatsDateString(t.timestamp) === today)
+    const todayApprovedTransactions = todayTransactions.filter(isApprovedTransaction)
+
+    const stats: AdminTransactionStats = {
+      totalCount: transactions.length,
+      pendingCount: transactions.filter(t => t.status === TRANSACTION_STATUS.PENDING).length,
+      todayCount: todayTransactions.length,
+      todayDeposits: sumTransactionsBtc(todayTransactions, 'deposit'),
+      todayWithdrawals: sumTransactionsBtc(todayTransactions, 'withdrawal'),
+      todayApprovedCount: todayApprovedTransactions.length,
+      todayApprovedDeposits: sumTransactionsBtc(todayApprovedTransactions, 'deposit'),
+      todayApprovedWithdrawals: sumTransactionsBtc(todayApprovedTransactions, 'withdrawal')
+    }
+
     // Get all users to enrich transaction data
     logger.debug('ユーザー情報を取得中')
     const usersResult = await dynamodb.scan(usersTableName)
@@ -92,12 +111,13 @@ export default defineEventHandler(async (event) => {
     const endIndex = startIndex + limit
     const paginatedTransactions = enrichedTransactions.slice(startIndex, endIndex)
 
-    const response: PaginatedResponse<EnrichedTransaction> = {
+    const response: PaginatedResponse<EnrichedTransaction, AdminTransactionStats> = {
       items: paginatedTransactions,
       total: enrichedTransactions.length,
       page,
       limit,
-      hasMore: endIndex < enrichedTransactions.length
+      hasMore: endIndex < enrichedTransactions.length,
+      stats
     }
 
     logger.debug('最終レスポンス:', { 

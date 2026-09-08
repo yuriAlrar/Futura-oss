@@ -1,6 +1,12 @@
 import { getDynamoDBService } from '~/server/utils/dynamodb'
+import { toStatsDateString, todayStatsDateString } from '~/server/utils/stats-helpers'
 import { useLogger } from '~/composables/useLogger'
-import type { EnhancedTransaction, User, PaginatedResponse } from '~/types'
+import type {
+  EnhancedTransaction,
+  User,
+  PaginatedResponse,
+  AdminTransactionRequestStats
+} from '~/types'
 import { TRANSACTION_STATUS } from '~/types'
 
 interface EnhancedTransactionRequest extends EnhancedTransaction {
@@ -38,19 +44,45 @@ export default defineEventHandler(async (event) => {
     
     logger.info(`リクエスト検索開始: status=${status}, page=${page}, limit=${limit}`)
     
-    const transactionsResult = await dynamodb.query(
-      transactionsTableName,
-      '#status = :status',
-      { ':status': status },
-      {
-        indexName: 'StatusIndex',
-        expressionAttributeNames: { '#status': 'status' },
-        scanIndexForward: false, // requested_atの降順
-        limit: limit + offset // ページネーション用に多めに取得
-      }
-    )
-    
-    const allTransactions = transactionsResult.items as EnhancedTransaction[]
+    // 統計カードはステータス絞り込み前の全件が対象なので、全ステータス分を並行取得する
+    // （StatusIndexはstatusがパーティションキーのためステータスごとにクエリする）
+    const queryByStatus = async (targetStatus: string) => {
+      const result = await dynamodb.query(
+        transactionsTableName,
+        '#status = :status',
+        { ':status': targetStatus },
+        {
+          indexName: 'StatusIndex',
+          expressionAttributeNames: { '#status': 'status' },
+          scanIndexForward: false // requested_atの降順
+        }
+      )
+
+      // 資産運用は入出金リクエストではないため除外する（画面の一覧と基準を揃える）
+      return (result.items as EnhancedTransaction[])
+        .filter(t => t.transaction_type !== 'asset_management')
+    }
+
+    const [pendingRequests, approvedRequests, rejectedRequests] = await Promise.all([
+      queryByStatus(TRANSACTION_STATUS.PENDING),
+      queryByStatus(TRANSACTION_STATUS.APPROVED),
+      queryByStatus(TRANSACTION_STATUS.REJECTED)
+    ])
+
+    const today = todayStatsDateString()
+    const stats: AdminTransactionRequestStats = {
+      totalCount: pendingRequests.length + approvedRequests.length + rejectedRequests.length,
+      pendingCount: pendingRequests.length,
+      todayApprovedCount: approvedRequests.filter(t => toStatsDateString(t.processed_at) === today).length,
+      todayRejectedCount: rejectedRequests.filter(t => toStatsDateString(t.processed_at) === today).length
+    }
+
+    const requestsByStatus: Record<string, EnhancedTransaction[]> = {
+      [TRANSACTION_STATUS.PENDING]: pendingRequests,
+      [TRANSACTION_STATUS.APPROVED]: approvedRequests,
+      [TRANSACTION_STATUS.REJECTED]: rejectedRequests
+    }
+    const allTransactions = requestsByStatus[status] || []
     
     // ページネーション処理
     const paginatedTransactions = allTransactions.slice(offset, offset + limit)
@@ -79,12 +111,13 @@ export default defineEventHandler(async (event) => {
     
     logger.info(`リクエスト取得完了: ${enhancedTransactions.length}件 (total: ${total})`)
     
-    const response: PaginatedResponse<EnhancedTransactionRequest> = {
+    const response: PaginatedResponse<EnhancedTransactionRequest, AdminTransactionRequestStats> = {
       items: enhancedTransactions,
       total,
       page,
       limit,
-      hasMore: offset + limit < total
+      hasMore: offset + limit < total,
+      stats
     }
     
     return {

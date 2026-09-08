@@ -136,16 +136,14 @@
 </template>
 
 <script setup lang="ts">
-import type { Transaction, User, PaginatedResponse } from '~/types'
+import type { Transaction, User, PaginatedResponse, AdminTransactionStats } from '~/types'
 import {
   getTransactionTypeLabel,
   getTransactionTypeColor as getTransactionTypeColorUtil,
   getTransactionTypeIcon,
   getTransactionTypeTextColor,
   getTransactionTypeSign,
-  getTransactionTypeVuetifyColor,
-  isApprovedTransaction,
-  reduceTransactionsBtc
+  getTransactionTypeVuetifyColor
 } from '~/utils/transaction'
 
 definePageMeta({
@@ -165,6 +163,7 @@ const apiClient = useApiClient()
 // State
 const transactions = ref<(Transaction & { user_name: string; user_email: string })[]>([])
 const totalCount = ref(0)
+const stats = ref<AdminTransactionStats | null>(null)
 const users = ref<User[]>([])
 const loading = ref(false)
 const itemsPerPage = ref(20)
@@ -212,29 +211,20 @@ const headers = [
 // サーバーサイドフィルタリングに移行するため削除
 
 // 全体統計（承認待ち含む）
-const todayTransactionsList = computed(() => {
-  const today = new Date().toDateString()
-  return transactions.value.filter(t => new Date(t.timestamp).toDateString() === today)
-})
+// 統計値はサーバが絞り込み後の全件を対象に算出した stats を使う。
+// 取得済みの items から集計すると1ページ分しか数えられず、数値がずれる。
+const todayTransactionCount = computed(() => stats.value?.todayCount ?? 0)
+const todayDepositTotal = computed(() => stats.value?.todayDeposits ?? 0)
+const todayWithdrawalTotal = computed(() => stats.value?.todayWithdrawals ?? 0)
 
-const todayTransactionCount = computed(() => todayTransactionsList.value.length)
-const todayDepositTotal = computed(() => reduceTransactionsBtc(todayTransactionsList.value, 'deposit'))
-const todayWithdrawalTotal = computed(() => reduceTransactionsBtc(todayTransactionsList.value, 'withdrawal'))
-
-const totalTransactions = computed(() => totalCount.value)
+const totalTransactions = computed(() => stats.value?.totalCount ?? totalCount.value)
 
 // 承認済み統計
-const todayApprovedTransactionsList = computed(() => {
-  return todayTransactionsList.value.filter(isApprovedTransaction)
-})
+const todayApprovedCount = computed(() => stats.value?.todayApprovedCount ?? 0)
+const todayApprovedDepositTotal = computed(() => stats.value?.todayApprovedDeposits ?? 0)
+const todayApprovedWithdrawalTotal = computed(() => stats.value?.todayApprovedWithdrawals ?? 0)
 
-const todayApprovedCount = computed(() => todayApprovedTransactionsList.value.length)
-const todayApprovedDepositTotal = computed(() => reduceTransactionsBtc(todayApprovedTransactionsList.value, 'deposit'))
-const todayApprovedWithdrawalTotal = computed(() => reduceTransactionsBtc(todayApprovedTransactionsList.value, 'withdrawal'))
-
-const pendingTransactionCount = computed(() => {
-  return transactions.value.filter(t => t.status === 'pending').length
-})
+const pendingTransactionCount = computed(() => stats.value?.pendingCount ?? 0)
 
 // メソッド
 const loadTransactions = async () => {
@@ -254,10 +244,11 @@ const loadTransactions = async () => {
       params.status = selectedStatus.value
     }
 
-    const response = await apiClient.get<PaginatedResponse<Transaction & { user_name: string; user_email: string }>>('/admin/transactions', { params })
+    const response = await apiClient.get<PaginatedResponse<Transaction & { user_name: string; user_email: string }, AdminTransactionStats>>('/admin/transactions', { params })
     const data = response.data!
     transactions.value = data.items
     totalCount.value = data.total
+    stats.value = data.stats ?? null
   } catch (error) {
     logger.error('取引履歴の読み込みに失敗しました:', error)
     showError('取引履歴の取得に失敗しました')

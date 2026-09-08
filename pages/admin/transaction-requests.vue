@@ -122,7 +122,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import type { PaginatedResponse } from '~/types'
+import type { PaginatedResponse, AdminTransactionRequestStats } from '~/types'
 import { TRANSACTION_STATUS } from '~/types'
 import { getTransactionTypeLabel } from '~/utils/transaction'
 import { formatBTC } from '~/utils/format'
@@ -162,6 +162,7 @@ const selectedStatus = ref('pending')
 const page = ref(1)
 const limit = ref(20)
 const totalCount = ref(0)
+const stats = ref<AdminTransactionRequestStats | null>(null)
 const hasMore = ref(false)
 const currentRate = ref(0)
 const showRejectDialogState = ref(false)
@@ -185,31 +186,19 @@ const statusOptions = [
 ]
 
 // Computed
-const pendingCount = computed(() => {
-  return requests.value.filter(r => r.status === TRANSACTION_STATUS.PENDING).length
-})
+// 統計値はサーバが全ステータスの全件を対象に算出した stats を使う。
+// 取得済みの items から集計すると現在ページ・現在の絞り込み分しか数えられず、数値がずれる。
+const pendingCount = computed(() => stats.value?.pendingCount ?? 0)
 
-const todayApprovedCount = computed(() => {
-  const today = new Date().toISOString().split('T')[0]
-  return requests.value.filter(r =>
-    r.status === TRANSACTION_STATUS.APPROVED &&
-    r.processed_at?.startsWith(today)
-  ).length
-})
+const todayApprovedCount = computed(() => stats.value?.todayApprovedCount ?? 0)
 
-const todayRejectedCount = computed(() => {
-  const today = new Date().toISOString().split('T')[0]
-  return requests.value.filter(r =>
-    r.status === TRANSACTION_STATUS.REJECTED &&
-    r.processed_at?.startsWith(today)
-  ).length
-})
+const todayRejectedCount = computed(() => stats.value?.todayRejectedCount ?? 0)
 
 // Methods
 const loadRequests = async () => {
   loading.value = true
   try {
-    const response = await apiClient.get<PaginatedResponse<EnhancedTransactionRequest>>('/admin/transaction-requests', {
+    const response = await apiClient.get<PaginatedResponse<EnhancedTransactionRequest, AdminTransactionRequestStats>>('/admin/transaction-requests', {
       params: {
         status: selectedStatus.value,
         page: page.value,
@@ -220,6 +209,7 @@ const loadRequests = async () => {
     // 資産運用タイプを除外
     requests.value = response.data!.items.filter(item => item.transaction_type !== 'asset_management')
     totalCount.value = response.data!.total
+    stats.value = response.data!.stats ?? null
     hasMore.value = response.data!.hasMore
   } catch (error: any) {
     logger.error('リクエスト取得エラー:', error)
