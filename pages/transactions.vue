@@ -76,8 +76,9 @@
 
     <!-- Transactions Table -->
     <v-card>
-      <v-data-table :headers="headers" :items="filteredTransactions" :loading="loading" :items-per-page="20"
-        class="elevation-0" no-data-text="取引履歴がありません" loading-text="読み込み中...">
+      <v-data-table-server v-model:items-per-page="itemsPerPage" :headers="headers" :items="transactions"
+        :items-length="totalCount" :loading="loading" class="elevation-0" no-data-text="取引履歴がありません"
+        loading-text="読み込み中..." @update:options="handleOptionsUpdate">
         <template #[`item.transaction_type`]="{ item }">
           <div class="flex gap-1.5">
             <v-chip :color="getTransactionTypeColor(item)" size="small" variant="flat" class="justify-start">
@@ -120,7 +121,7 @@
         <template #[`item.actions`]="{ item }">
           <v-btn size="small" variant="text" color="info" icon="mdi-eye" @click="viewTransactionDetails(item)" />
         </template>
-      </v-data-table>
+      </v-data-table-server>
     </v-card>
 
     <!-- Transaction Details Dialog -->
@@ -157,7 +158,10 @@ const { showError } = useNotification()
 // State
 const transactions = ref<TransactionWithBalance[]>([])
 const stats = ref<TransactionStats | null>(null)
+const totalCount = ref(0)
 const loading = ref(false)
+const page = ref(1)
+const itemsPerPage = ref(20)
 const selectedTransactionType = ref('all')
 const selectedStatus = ref('all')
 const searchQuery = ref('')
@@ -190,34 +194,6 @@ const headers = [
 ]
 
 // Computed
-const filteredTransactions = computed(() => {
-  let filtered = transactions.value
-
-  // Filter by transaction type
-  if (selectedTransactionType.value !== 'all') {
-    filtered = filtered.filter(t => t.transaction_type === selectedTransactionType.value)
-  }
-
-  // Filter by status
-  if (selectedStatus.value !== 'all') {
-    filtered = filtered.filter(t => {
-      const status = t.status || 'approved' // statusが未設定の場合は承認済みとして扱う
-      return status === selectedStatus.value
-    })
-  }
-
-  // Filter by search query (memo field)
-  if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase()
-    filtered = filtered.filter(t =>
-      t.memo.toLowerCase().includes(query) ||
-      t.reason.toLowerCase().includes(query)
-    )
-  }
-
-  return filtered
-})
-
 // 統計値はサーバが全件を対象に算出した stats を使う。
 // 取得済みの items から集計すると1ページ分しか数えられず、数値がずれる。
 const totalTransactions = computed(() => stats.value?.totalCount ?? 0)
@@ -238,14 +214,28 @@ const loadTransactions = async () => {
 
   loading.value = true
   try {
-    logger.debug('取引履歴を読み込み中...', { userId: user.value.user_id })
+    logger.debug('取引履歴を読み込み中...', { userId: user.value.user_id, page: page.value })
+
+    // 絞り込みとページングはサーバ側で行う（クライアント側で絞り込むと
+    // 取得済みの1ページ分しか対象にできず、全体件数とずれる）
     const response = await apiClient.get<PaginatedResponse<TransactionWithBalance, TransactionStats>>(
-      `/transactions?user_id=${user.value.user_id}`
+      '/transactions',
+      {
+        params: {
+          user_id: user.value.user_id,
+          page: page.value,
+          limit: itemsPerPage.value,
+          transaction_type: selectedTransactionType.value,
+          status: selectedStatus.value,
+          search: searchQuery.value || ''
+        }
+      }
     )
     logger.debug('APIレスポンス:', response)
 
     if (response.success && response.data && response.data.items) {
       transactions.value = response.data.items
+      totalCount.value = response.data.total
       stats.value = response.data.stats ?? null
       logger.info(`取引履歴を${response.data.items.length}件読み込みました (全体: ${response.data.stats?.totalCount ?? 0}件)`)
     } else {
@@ -272,6 +262,18 @@ const loadTransactions = async () => {
     loading.value = false
   }
 }
+
+const handleOptionsUpdate = (options: { page: number; itemsPerPage: number }) => {
+  page.value = options.page
+  itemsPerPage.value = options.itemsPerPage
+  loadTransactions()
+}
+
+// 絞り込み条件が変わったら1ページ目から取り直す
+watch([selectedTransactionType, selectedStatus, searchQuery], () => {
+  page.value = 1
+  loadTransactions()
+})
 
 const viewTransactionDetails = (transaction: Transaction) => {
   selectedTransaction.value = transaction

@@ -23,6 +23,8 @@ export default defineEventHandler(async (event) => {
     const page = Number(query.page) || 1
     const limit = Math.min(Number(query.limit) || 20, 100)
     const transactionType = query.transaction_type as string
+    const status = query.status as string
+    const search = ((query.search as string) || '').trim().toLowerCase()
 
     const dynamodb = getDynamoDBService()
     const transactionsTableName = dynamodb.getTableName('transactions')
@@ -58,11 +60,25 @@ export default defineEventHandler(async (event) => {
       pendingCount: allTransactions.filter(t => t.status === TRANSACTION_STATUS.PENDING).length
     }
 
+    // ここから先は一覧表示用の絞り込み（統計値には影響しない）
     let transactions = allTransactions
 
     // Filter by transaction type if specified
     if (transactionType && ['deposit', 'withdrawal'].includes(transactionType)) {
       transactions = transactions.filter(t => t.transaction_type === transactionType)
+    }
+
+    // ステータス絞り込み（statusが未設定の既存データは承認済みとして扱う）
+    if (status && status !== 'all') {
+      transactions = transactions.filter(t => (t.status || TRANSACTION_STATUS.APPROVED) === status)
+    }
+
+    // メモ・理由に対するキーワード検索
+    if (search) {
+      transactions = transactions.filter(t =>
+        (t.memo || '').toLowerCase().includes(search) ||
+        (t.reason || '').toLowerCase().includes(search)
+      )
     }
 
     // Get user information for the authenticated user
