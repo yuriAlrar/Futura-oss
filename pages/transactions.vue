@@ -129,7 +129,7 @@
 </template>
 
 <script setup lang="ts">
-import type { Transaction, PaginatedResponse } from '~/types'
+import type { Transaction } from '~/types'
 import {
   getTransactionTypeLabel,
   getTransactionTypeColor as getTransactionTypeColorUtil,
@@ -237,8 +237,6 @@ const pendingTransactionCount = computed(() => {
 })
 
 // Methods
-// バックエンドは1リクエストあたり最大100件のページネーションのため、
-// 「全件表示」を実現するにはhasMoreがfalseになるまでページを繰り返し取得する
 const loadTransactions = async () => {
   if (!user.value) return
 
@@ -246,27 +244,7 @@ const loadTransactions = async () => {
   try {
     logger.debug('取引履歴を読み込み中...', { userId: user.value.user_id })
 
-    const allItems: Transaction[] = []
-    let page = 1
-    let hasMore = true
-
-    while (hasMore) {
-      const response = await apiClient.get<PaginatedResponse<Transaction>>(
-        '/transactions',
-        { params: { page, limit: 100 } }
-      )
-
-      if (!response.success || !response.data) {
-        logger.warn('APIレスポンスが期待通りの形式ではありません:', response)
-        showError('取引履歴のデータ形式に問題があります')
-        break
-      }
-
-      allItems.push(...response.data.items)
-      hasMore = response.data.hasMore
-      page += 1
-    }
-
+    const allItems = await apiClient.getAllPages<Transaction>('/transactions')
     transactions.value = allItems
     logger.info(`取引履歴を${allItems.length}件読み込みました`)
   } catch (error: any) {

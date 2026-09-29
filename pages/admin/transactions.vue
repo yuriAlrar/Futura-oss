@@ -280,8 +280,8 @@ watch([selectedUser, selectedTransactionType, selectedStatus], () => {
 
 const loadUsers = async () => {
   try {
-    const response = await apiClient.get<{ items: User[] }>('/admin/users')
-    users.value = response.data!.items.filter(user => user.status !== 'deleted')
+    const allUsers = await apiClient.getAllPages<User>('/admin/users')
+    users.value = allUsers.filter(user => user.status !== 'deleted')
   } catch (error) {
     logger.error('ユーザー一覧の読み込みに失敗しました:', error)
     showError('ユーザー一覧の取得に失敗しました')

@@ -216,17 +216,12 @@ const totalRecords = computed(() => rates.value.length)
 const loadRates = async () => {
   loading.value = true
   try {
-    const [ratesResponse, latestResponse] = await Promise.all([
-      apiClient.get<{ items: MarketRate[] }>('/market-rates'),
+    const [allRates, latestResponse] = await Promise.all([
+      apiClient.getAllPages<MarketRate>('/market-rates'),
       apiClient.get<MarketRate>('/market-rates/latest')
     ])
 
-    if (!ratesResponse.success) {
-      showError(ratesResponse.error || '相場データの取得に失敗しました')
-      return
-    }
-
-    rates.value = ratesResponse.data!.items
+    rates.value = allRates
     latestRate.value = latestResponse.success ? (latestResponse.data || null) : null
   } catch (error) {
     logger.error('相場データの読み込みに失敗しました:', error)
