@@ -14,8 +14,13 @@ export default defineEventHandler(async (event) => {
     const result = await dynamodb.query(
       usersTableName,
       'parent_user_id = :parent_user_id',
-      { ':parent_user_id': currentUser.user_id },
-      { indexName: 'ParentUserIndex' }
+      { ':parent_user_id': currentUser.user_id, ':deleted': 'deleted' },
+      {
+        indexName: 'ParentUserIndex',
+        // 削除済みのサブアカウントは一覧に含めない
+        filterExpression: '#status <> :deleted',
+        expressionAttributeNames: { '#status': 'status' }
+      }
     )
 
     return {
