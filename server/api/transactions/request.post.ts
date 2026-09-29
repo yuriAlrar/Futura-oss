@@ -6,6 +6,21 @@ import { TRANSACTION_STATUS } from '~/types'
 import { generateTransactionId } from '~/server/utils/uuid'
 import { validateTransactionRequest, validateWithdrawalBalance, validateDepositApproval, getTotalBalance } from '~/server/utils/transaction-helpers'
 
+// 1日あたりの入出金リクエスト上限回数
+const DAILY_REQUEST_LIMIT = 50
+
+// JSTのUTCからの時差（ミリ秒）
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000
+
+/**
+ * 指定日時が属するJSTの日の0:00をUTCのISO文字列で返す
+ */
+function getJstStartOfDayISO(date: Date): string {
+  const jstDate = new Date(date.getTime() + JST_OFFSET_MS)
+  jstDate.setUTCHours(0, 0, 0, 0)
+  return new Date(jstDate.getTime() - JST_OFFSET_MS).toISOString()
+}
+
 export default defineEventHandler(async (event) => {
   const logger = useLogger({ prefix: '[TransactionRequest]' })
   
@@ -66,9 +81,8 @@ export default defineEventHandler(async (event) => {
     }
     
     // 2. 1日あたりのリクエスト回数制限をチェック
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const todayISO = today.toISOString()
+    //    日付の区切りはJSTの0:00とする（サーバーはUTCで動作するため明示的に算出する）
+    const todayISO = getJstStartOfDayISO(new Date())
     
     const todaysRequestsResult = await dynamodb.query(
       transactionsTableName,
@@ -83,10 +97,10 @@ export default defineEventHandler(async (event) => {
       }
     )
     
-    if (todaysRequestsResult.items.length >= 50) {
+    if (todaysRequestsResult.items.length >= DAILY_REQUEST_LIMIT) {
       throw createError({
         statusCode: 429,
-        statusMessage: 'Daily request limit exceeded (5 requests per day)'
+        statusMessage: `Daily request limit exceeded (${DAILY_REQUEST_LIMIT} requests per day)`
       })
     }
     
