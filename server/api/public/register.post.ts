@@ -1,7 +1,7 @@
-import { AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminAddUserToGroupCommand, AdminGetUserCommand } from '@aws-sdk/client-cognito-identity-provider'
+import { AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminAddUserToGroupCommand, AdminGetUserCommand, AdminDeleteUserCommand } from '@aws-sdk/client-cognito-identity-provider'
 import { createCognitoClient } from '~/server/utils/client-factory'
 import { getDynamoDBService } from '~/server/utils/dynamodb'
-import { getInvite, consumeInvite } from '~/server/utils/invite-helpers'
+import { getInvite, consumeInvite, releaseInvite } from '~/server/utils/invite-helpers'
 import { checkRateLimit } from '~/server/utils/rate-limiter'
 import { generateUUID } from '~/server/utils/uuid'
 import { useLogger } from '~/composables/useLogger'
@@ -50,6 +50,8 @@ export default defineEventHandler(async (event) => {
 
     const config = useRuntimeConfig()
     const cognitoClient = createCognitoClient()
+    // Cognitoユーザーを作成済みかどうか（失敗時のロールバック判定用）
+    let cognitoUserCreated = false
 
     try {
       // 3. Cognitoユーザーを作成し、入力されたパスワードをそのまま本パスワードとして確定する
@@ -71,6 +73,7 @@ export default defineEventHandler(async (event) => {
       if (!cognitoResponse.User?.Username) {
         throw createError({ statusCode: 500, statusMessage: 'Failed to create user in Cognito' })
       }
+      cognitoUserCreated = true
 
       await cognitoClient.send(new AdminSetUserPasswordCommand({
         UserPoolId: config.cognitoUserPoolId as string,
@@ -140,9 +143,27 @@ export default defineEventHandler(async (event) => {
         message: 'Registration successful. Admin approval is required before full access.'
       }
     } catch (innerError: unknown) {
-      // Cognito/DynamoDB側の処理に失敗した場合、招待コードの再利用はできない
-      // （モック運用のため、失敗時の招待コード復活は行わない。管理者が再発行で対応する）
-      logger.error('登録処理中にエラーが発生しました（招待コードは消費済みのままです）:', innerError)
+      // 登録処理に失敗した場合はロールバックし、招待コードを再利用できるようにする
+      // ロールバック自体の失敗はログのみとし、元のエラーを返す
+      logger.error('登録処理中にエラーが発生しました。ロールバックします:', innerError)
+
+      if (cognitoUserCreated) {
+        try {
+          await cognitoClient.send(new AdminDeleteUserCommand({
+            UserPoolId: config.cognitoUserPoolId as string,
+            Username: email
+          }))
+        } catch (deleteError) {
+          logger.error(`ロールバック失敗: Cognitoユーザー ${email} の削除に失敗しました:`, deleteError)
+        }
+      }
+
+      try {
+        await releaseInvite(invite_code, reservationId)
+      } catch (releaseError) {
+        logger.error(`ロールバック失敗: 招待コード ${invite_code} を有効に戻せませんでした:`, releaseError)
+      }
+
       throw innerError
     }
   } catch (error: unknown) {

@@ -17,7 +17,10 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 404, statusMessage: 'Invite not found' })
     }
 
-    await revokeInvite(inviteCode)
+    const revoked = await revokeInvite(inviteCode)
+    if (!revoked) {
+      throw createError({ statusCode: 409, statusMessage: 'Invite is not active' })
+    }
 
     return {
       success: true,
