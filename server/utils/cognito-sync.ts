@@ -1,7 +1,7 @@
 import { ListUsersCommand, type ListUsersCommandOutput } from '@aws-sdk/client-cognito-identity-provider'
 import { createCognitoClient } from './client-factory'
 import { getDynamoDBService } from './dynamodb'
-import { getCognitoGroups, listCognitoGroups, createCognitoGroup } from './cognito-groups'
+import { listCognitoGroups, createCognitoGroup } from './cognito-groups'
 import { DEFAULT_GROUP_PERMISSIONS } from './permission-definitions'
 import { useLogger } from '~/composables/useLogger'
 import type { User } from '~/types'
@@ -107,16 +107,15 @@ async function syncUsersFromCognito(): Promise<{ synced: number; errors: number 
           continue
         }
         
-        // グループ情報を取得
-        const groups = await getCognitoGroups(attributes.email)
-        
-        // ステータスをマップ
-        let status: 'active' | 'deleted' | 'suspended' = 'active'
-        if (cognitoUser.UserStatus === 'FORCE_CHANGE_PASSWORD') {
-          status = 'active' // 初回パスワード変更が必要でもactiveとする
-        } else if (cognitoUser.UserStatus !== 'CONFIRMED') {
-          status = 'suspended'
+        // 既存ユーザーは更新しない（DB側で変更した状態・名前をCognitoの値で上書きしないため）
+        const existingUser = await dynamodb.get(usersTableName, { user_id: attributes.sub })
+        if (existingUser) {
+          continue
         }
+
+        // ステータスをマップ
+        // 停止中ユーザーもCognitoのUserStatusはCONFIRMEDのままのため、Enabledで判定する
+        const status: User['status'] = cognitoUser.Enabled === false ? 'suspended' : 'active'
         
         // Userオブジェクトを作成
         const user: User = {
@@ -133,27 +132,10 @@ async function syncUsersFromCognito(): Promise<{ synced: number; errors: number 
           updated_at: cognitoUser.UserLastModifiedDate?.toISOString() || new Date().toISOString()
         }
         
-        // 既存ユーザーをチェック
-        const existingUser = await dynamodb.get(usersTableName, { user_id: user.user_id })
-        
-        if (!existingUser) {
-          // ユーザーが存在しない場合は新規作成
-          await dynamodb.put(usersTableName, user as any)
-          logger.info(`新規ユーザーを同期しました: ${user.email}`)
-          syncedCount++
-        } else {
-          // 既存ユーザーがある場合は必要に応じて更新
-          if (existingUser.status !== user.status || existingUser.name !== user.name) {
-            await dynamodb.put(usersTableName, {
-              ...existingUser,
-              name: user.name,
-              status: user.status,
-              updated_at: new Date().toISOString()
-            })
-            logger.info(`既存ユーザーを更新しました: ${user.email}`)
-            syncedCount++
-          }
-        }
+        // DBに存在しないユーザーのみ作成する
+        await dynamodb.put(usersTableName, user as unknown as Record<string, unknown>)
+        logger.info(`新規ユーザーを同期しました: ${user.email}`)
+        syncedCount++
       } catch (error) {
         logger.error(`ユーザーの同期中にエラー:`, error)
         errorsCount++
@@ -204,11 +186,12 @@ async function syncPermissionsFromCognito(): Promise<{ synced: number; errors: n
           group_name: groupDef.group_name 
         })
         
+        // 権限レコードが存在しない場合のみ既定値で作成する
+        // （既存レコードは管理画面でカスタマイズされている可能性があるため更新しない）
         if (!existingPermission) {
-          // グループ権限が存在しない場合は作成
           const permissionRecord = {
             group_name: groupDef.group_name,
-            permissions: groupDef.permissions,
+            permissions: [...groupDef.permissions],
             description: groupDef.description,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
@@ -217,23 +200,6 @@ async function syncPermissionsFromCognito(): Promise<{ synced: number; errors: n
           await dynamodb.put(permissionsTableName, permissionRecord)
           logger.info(`グループ権限を作成しました: ${groupDef.group_name}`)
           syncedCount++
-        } else {
-          // 既存権限と比較して更新が必要かチェック
-          const existingPerms = JSON.stringify(existingPermission.permissions?.sort())
-          const newPerms = JSON.stringify(groupDef.permissions.sort())
-          
-          if (existingPerms !== newPerms) {
-            const updatedRecord = {
-              ...existingPermission,
-              permissions: groupDef.permissions,
-              description: groupDef.description,
-              updated_at: new Date().toISOString()
-            }
-            
-            await dynamodb.put(permissionsTableName, updatedRecord)
-            logger.info(`グループ権限を更新しました: ${groupDef.group_name}`)
-            syncedCount++
-          }
         }
         
       } catch (error) {
