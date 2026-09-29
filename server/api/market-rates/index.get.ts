@@ -15,10 +15,8 @@ export default defineEventHandler(async (event) => {
     const dynamodb = getDynamoDBService()
     const tableName = dynamodb.getTableName('market_rates')
 
-    // Get market rates sorted by timestamp (newest first)
-    const result = await dynamodb.scan(tableName, {
-      limit: limit * page // Simple pagination
-    })
+    // scanは順序を保証しないため全件取得してから新しい順にソートする
+    const result = await dynamodb.scan(tableName)
 
     let rates = result.items as MarketRate[]
     

@@ -53,37 +53,6 @@ export async function syncCognitoToDatabase(): Promise<{
 }
 
 /**
- * 初回同期が必要かチェックし、必要に応じて実行
- * 管理者ユーザーの初回ログイン時に呼び出し
- */
-export async function ensureInitialSync(): Promise<boolean> {
-  const logger = useLogger({ prefix: '[InitialSync]' })
-  
-  try {
-    const dynamodb = getDynamoDBService()
-    const usersTableName = dynamodb.getTableName('users')
-    
-    // Usersテーブルが空かチェック
-    const usersResult = await dynamodb.scan(usersTableName, { limit: 1 })
-    
-    if (usersResult.items.length === 0) {
-      logger.info('Usersテーブルが空です。初回同期を実行します。')
-      await syncCognitoToDatabase()
-      logger.info('初回同期が完了しました。')
-      return true
-    }
-    
-    logger.debug('Usersテーブルにデータが存在します。初回同期は不要です。')
-    return false
-    
-  } catch (error) {
-    logger.error('初回同期チェック中にエラー:', error)
-    // エラーが発生してもログイン処理は継続
-    return false
-  }
-}
-
-/**
  * CognitoからUsersテーブルを同期
  */
 async function syncUsersFromCognito(): Promise<{ synced: number; errors: number }> {

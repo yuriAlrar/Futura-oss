@@ -45,8 +45,7 @@ export default defineEventHandler(async (event) => {
       {
         indexName: 'StatusIndex',
         expressionAttributeNames: { '#status': 'status' },
-        scanIndexForward: false, // requested_atの降順
-        limit: limit + offset // ページネーション用に多めに取得
+        scanIndexForward: false // requested_atの降順（totalを正しく返すため全件取得する）
       }
     )
     
