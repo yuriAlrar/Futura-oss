@@ -1,4 +1,5 @@
 import { getDynamoDBService } from '~/server/utils/dynamodb'
+import { getAllMarketRatesDesc } from '~/server/utils/market-rate-helpers'
 import {
   calculateBalance,
   calculateBalanceAtDate,
@@ -29,7 +30,6 @@ export default defineEventHandler(async (event) => {
 
     const dynamodb = getDynamoDBService()
     const transactionsTableName = dynamodb.getTableName('transactions')
-    const ratesTableName = dynamodb.getTableName('market_rates')
     const usersTableName = dynamodb.getTableName('users')
 
     // Verify user exists
@@ -64,9 +64,7 @@ export default defineEventHandler(async (event) => {
     const netProfit = calculateNetProfit(currentBalance, depositPrincipal, withdrawalTotal)
 
     // Get market rates
-    const ratesResult = await dynamodb.scan(ratesTableName)
-    const rates = (ratesResult.items as MarketRate[])
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    const rates = await getAllMarketRatesDesc()
 
     // Calculate current value in JPY
     const currentRate = rates[0]

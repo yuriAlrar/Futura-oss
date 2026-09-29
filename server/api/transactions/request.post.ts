@@ -1,4 +1,5 @@
 import { getDynamoDBService, isTransactionConditionFailed } from '~/server/utils/dynamodb'
+import { getLatestMarketRate } from '~/server/utils/market-rate-helpers'
 import { useLogger } from '~/composables/useLogger'
 import type { TransactionRequestForm, EnhancedTransaction } from '~/types'
 import { TRANSACTION_STATUS } from '~/types'
@@ -30,16 +31,13 @@ export default defineEventHandler(async (event) => {
     
     const dynamodb = getDynamoDBService()
     const transactionsTableName = dynamodb.getTableName('transactions')
-    const marketRatesTableName = dynamodb.getTableName('market_rates')
 
     // リクエスト時点のレートでJPY換算額をスナップショット保存する
     // （現在はレート固定運用のため実質amountと同値だが、将来のレート変動再開に備える）
     let requestedJpyAmount: number | undefined
     try {
-      const ratesResult = await dynamodb.scan(marketRatesTableName)
-      const rates = ratesResult.items as { timestamp: string; btc_jpy_rate: number }[]
-      if (rates.length > 0) {
-        const latestRate = rates.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
+      const latestRate = await getLatestMarketRate()
+      if (latestRate) {
         requestedJpyAmount = Math.round(body.amount * latestRate.btc_jpy_rate)
       }
     } catch (rateError: unknown) {

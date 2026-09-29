@@ -30,36 +30,32 @@ export default defineEventHandler(async (event) => {
       })
     }
     
-    let transactions: Transaction[] = []
-    
-    if (status === 'all') {
-      // すべてのステータスを取得する場合、メインテーブルの全スキャンを使用
-      // 効率は劣るが、ユーザー個人のデータなので実用上問題なし
-      let filterExpression = 'user_id = :user_id'
-      const expressionAttributeValues: any = { 
-        ':user_id': currentUser.user_id
-      }
-      
-      // transaction_typeフィルタリング
-      if (transactionType !== 'all') {
-        filterExpression += ' AND transaction_type = :transaction_type'
-        expressionAttributeValues[':transaction_type'] = transactionType
-      }
-      
-      const result = await dynamodb.scan(
+    // ユーザー本人の取引をUserTimestampIndexで取得する（取引テーブル全件scanを避ける）
+    const fetchUserTransactions = async (): Promise<Transaction[]> => {
+      const result = await dynamodb.query(
         transactionsTableName,
+        'user_id = :user_id',
+        transactionType !== 'all'
+          ? { ':user_id': currentUser.user_id, ':transaction_type': transactionType }
+          : { ':user_id': currentUser.user_id },
         {
-          filterExpression,
-          expressionAttributeValues
+          indexName: 'UserTimestampIndex',
+          filterExpression: transactionType !== 'all' ? 'transaction_type = :transaction_type' : undefined
         }
       )
-      
+
       // 時系列でソート（降順：新しいものから）
-      transactions = (result.items as Transaction[]).sort((a, b) => {
+      return (result.items as Transaction[]).sort((a, b) => {
         const dateA = new Date(a.requested_at || a.timestamp)
         const dateB = new Date(b.requested_at || b.timestamp)
         return dateB.getTime() - dateA.getTime()
       })
+    }
+
+    let transactions: Transaction[] = []
+    
+    if (status === 'all') {
+      transactions = await fetchUserTransactions()
     } else {
       // 特定のステータスのみ取得
       // ステータスの有効性チェック
@@ -94,34 +90,11 @@ export default defineEventHandler(async (event) => {
       } catch (indexError) {
         logger.warn(`TransactionUserStatusIndexでエラー: ${indexError}、フォールバックを実行`)
         
-        // インデックスに問題がある場合のフォールバック：スキャンでフィルタリング
-        let fallbackFilterExpression = 'user_id = :user_id'
-        const fallbackExpressionAttributeValues: any = { 
-          ':user_id': currentUser.user_id
-        }
-        
-        // transaction_typeフィルタリング
-        if (transactionType !== 'all') {
-          fallbackFilterExpression += ' AND transaction_type = :transaction_type'
-          fallbackExpressionAttributeValues[':transaction_type'] = transactionType
-        }
-        
-        const allResult = await dynamodb.scan(
-          transactionsTableName,
-          {
-            filterExpression: fallbackFilterExpression,
-            expressionAttributeValues: fallbackExpressionAttributeValues
-          }
-        )
-        
-        // フィルタリング：statusが未設定の場合は'approved'として扱う
-        transactions = (allResult.items as Transaction[]).filter(t => {
+        // インデックスに問題がある場合のフォールバック：本人の取引を取得してステータスで絞り込む
+        // statusが未設定の場合は'approved'として扱う
+        transactions = (await fetchUserTransactions()).filter(t => {
           const transactionStatus = t.status || 'approved'
           return transactionStatus === status
-        }).sort((a, b) => {
-          const dateA = new Date(a.requested_at || a.timestamp)
-          const dateB = new Date(b.requested_at || b.timestamp)
-          return dateB.getTime() - dateA.getTime()
         })
       }
     }

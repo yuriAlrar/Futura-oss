@@ -1,4 +1,5 @@
 import { getDynamoDBService } from '~/server/utils/dynamodb'
+import { getLatestMarketRate } from '~/server/utils/market-rate-helpers'
 import { calculateBalance } from '~/server/utils/transaction-helpers'
 import { useLogger } from '~/composables/useLogger'
 import type { Transaction } from '~/types'
@@ -47,16 +48,8 @@ export default defineEventHandler(async (event) => {
     const balance = calculateBalance(transactions)
 
     // Get latest market rate for JPY value calculation
-    const ratesTableName = dynamodb.getTableName('market_rates')
-    const ratesResult = await dynamodb.scan(ratesTableName)
-    
-    let jpyValue = 0
-    if (ratesResult.items.length > 0) {
-      const latestRate = ratesResult.items.sort((a, b) => 
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      )[0]
-      jpyValue = balance * latestRate.btc_jpy_rate
-    }
+    const latestRate = await getLatestMarketRate()
+    const jpyValue = latestRate ? balance * latestRate.btc_jpy_rate : 0
 
     return {
       success: true,

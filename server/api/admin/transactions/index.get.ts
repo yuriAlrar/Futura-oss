@@ -71,14 +71,21 @@ export default defineEventHandler(async (event) => {
       logger.debug('ステータスフィルタ適用後:', { status, count: transactions.length })
     }
 
-    // Get all users to enrich transaction data
+    // Simple pagination
+    const startIndex = (page - 1) * limit
+    const endIndex = startIndex + limit
+    const pageTransactions = transactions.slice(startIndex, endIndex)
+
+    // 表示対象ページのユーザー情報のみ取得する（usersテーブル全件scanを避ける）
     logger.debug('ユーザー情報を取得中')
-    const usersResult = await dynamodb.scan(usersTableName)
-    const users = usersResult.items as User[]
-    const userMap = new Map(users.map(user => [user.user_id, user]))
+    const pageUserIds = [...new Set(pageTransactions.map(t => t.user_id))]
+    const pageUsers = await Promise.all(
+      pageUserIds.map(id => dynamodb.get(usersTableName, { user_id: id }) as Promise<User | undefined>)
+    )
+    const userMap = new Map(pageUsers.filter((u): u is User => !!u).map(user => [user.user_id, user]))
     
     // Enrich transactions with user data
-    const enrichedTransactions: EnrichedTransaction[] = transactions.map(transaction => {
+    const paginatedTransactions: EnrichedTransaction[] = pageTransactions.map(transaction => {
       const user = userMap.get(transaction.user_id)
       return {
         ...transaction,
@@ -87,21 +94,16 @@ export default defineEventHandler(async (event) => {
       }
     })
 
-    // Simple pagination
-    const startIndex = (page - 1) * limit
-    const endIndex = startIndex + limit
-    const paginatedTransactions = enrichedTransactions.slice(startIndex, endIndex)
-
     const response: PaginatedResponse<EnrichedTransaction> = {
       items: paginatedTransactions,
-      total: enrichedTransactions.length,
+      total: transactions.length,
       page,
       limit,
-      hasMore: endIndex < enrichedTransactions.length
+      hasMore: endIndex < transactions.length
     }
 
     logger.debug('最終レスポンス:', { 
-      totalItems: enrichedTransactions.length,
+      totalItems: transactions.length,
       paginatedItems: paginatedTransactions.length,
       page,
       limit
