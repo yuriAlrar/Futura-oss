@@ -182,7 +182,11 @@ const createRate = async () => {
   loading.value = true
 
   try {
-    const response = await apiClient.post('/admin/market-rates', form)
+    // 入力値（ローカル時刻）をタイムゾーン付きのISO文字列に変換して送信する
+    const response = await apiClient.post('/admin/market-rates', {
+      ...form,
+      timestamp: new Date(form.timestamp).toISOString()
+    })
 
     if (!response.success) {
       showError(response.statusCode === 403 ? '相場価格を設定する権限がありません' : (response.error || '相場価格の設定に失敗しました'))

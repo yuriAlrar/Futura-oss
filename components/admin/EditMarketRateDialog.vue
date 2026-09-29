@@ -188,7 +188,11 @@ const updateRate = async () => {
   loading.value = true
 
   try {
-    const response = await apiClient.put(`/admin/market-rates/${props.marketRate.rate_id}`, form)
+    // 入力値（ローカル時刻）をタイムゾーン付きのISO文字列に変換して送信する
+    const response = await apiClient.put(`/admin/market-rates/${props.marketRate.rate_id}`, {
+      ...form,
+      timestamp: new Date(form.timestamp).toISOString()
+    })
 
     if (!response.success) {
       showError(response.statusCode === 403 ? '相場価格を編集する権限がありません' : (response.error || '相場価格の更新に失敗しました'))

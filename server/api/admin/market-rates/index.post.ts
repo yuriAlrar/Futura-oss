@@ -35,9 +35,11 @@ export default defineEventHandler(async (event) => {
     const dynamodb = getDynamoDBService()
     const ratesTableName = dynamodb.getTableName('market_rates')
     const rateId = Math.floor(rateDate.getTime() / 1000).toString()
+    // タイムゾーンの解釈違いを防ぐため、UTCのISO文字列に正規化して保存する
+    const normalizedTimestamp = rateDate.toISOString()
     const now = new Date().toISOString()
 
-    const existingRate = await dynamodb.get(ratesTableName, { rate_id: rateId, timestamp })
+    const existingRate = await dynamodb.get(ratesTableName, { rate_id: rateId, timestamp: normalizedTimestamp })
     if (existingRate) {
       throw createError({
         statusCode: 409,
@@ -47,7 +49,7 @@ export default defineEventHandler(async (event) => {
 
     const marketRate = {
       rate_id: rateId,
-      timestamp,
+      timestamp: normalizedTimestamp,
       btc_jpy_rate,
       created_by: currentUser.user_id,
       created_at: now

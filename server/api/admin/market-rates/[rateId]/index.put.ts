@@ -44,12 +44,14 @@ export default defineEventHandler(async (event): Promise<ApiResponse<MarketRate>
     const dynamodb = getDynamoDBService()
     const tableName = dynamodb.getTableName('market_rates')
 
-    const existingRateResult = await dynamodb.scan(tableName, {
-      filterExpression: 'rate_id = :rate_id',
-      expressionAttributeValues: { ':rate_id': rateId }
-    })
+    // rate_idはパーティションキーのためqueryで取得する
+    const existingRateResult = await dynamodb.query(
+      tableName,
+      'rate_id = :rate_id',
+      { ':rate_id': rateId }
+    )
 
-    if (!existingRateResult || !existingRateResult.items || existingRateResult.items.length === 0) {
+    if (existingRateResult.items.length === 0) {
       throw createError({
         statusCode: 404,
         statusMessage: 'Market rate not found'
@@ -57,11 +59,13 @@ export default defineEventHandler(async (event): Promise<ApiResponse<MarketRate>
     }
 
     const existingRate = existingRateResult.items[0] as MarketRate
+    // タイムゾーンの解釈違いを防ぐため、UTCのISO文字列に正規化して保存する
+    const normalizedTimestamp = rateDate.toISOString()
     const now = new Date().toISOString()
 
     const updatedMarketRate: MarketRate = {
       rate_id: rateId,
-      timestamp,
+      timestamp: normalizedTimestamp,
       btc_jpy_rate,
       created_by: existingRate.created_by,
       created_at: existingRate.created_at,
@@ -69,24 +73,39 @@ export default defineEventHandler(async (event): Promise<ApiResponse<MarketRate>
       updated_by: currentUser.user_id
     }
 
-    // タイムスタンプがキーの一部のため、削除→作成のトランザクションで更新する
-    await dynamodb.transactWrite([
-      {
-        Delete: {
-          TableName: tableName,
-          Key: {
-            rate_id: rateId,
-            timestamp: existingRate.timestamp
+    if (existingRate.timestamp === normalizedTimestamp) {
+      // キーが変わらない場合は同一アイテムの更新のみ
+      // （同一キーへのDelete+Putは1トランザクション内で実行できないため）
+      await dynamodb.update(
+        tableName,
+        { rate_id: rateId, timestamp: normalizedTimestamp },
+        'SET btc_jpy_rate = :btc_jpy_rate, updated_at = :updated_at, updated_by = :updated_by',
+        {
+          ':btc_jpy_rate': btc_jpy_rate,
+          ':updated_at': now,
+          ':updated_by': currentUser.user_id
+        }
+      )
+    } else {
+      // タイムスタンプがキーの一部のため、削除→作成のトランザクションで更新する
+      await dynamodb.transactWrite([
+        {
+          Delete: {
+            TableName: tableName,
+            Key: {
+              rate_id: rateId,
+              timestamp: existingRate.timestamp
+            }
+          }
+        },
+        {
+          Put: {
+            TableName: tableName,
+            Item: updatedMarketRate as unknown as Record<string, unknown>
           }
         }
-      },
-      {
-        Put: {
-          TableName: tableName,
-          Item: updatedMarketRate as unknown as Record<string, unknown>
-        }
-      }
-    ])
+      ])
+    }
 
     logger.info(`内部レートを更新しました: ${rateId} - ${currentUser.email} - ¥${btc_jpy_rate}`)
 
