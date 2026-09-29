@@ -202,9 +202,9 @@ export default defineEventHandler(async (event) => {
       enhancedTransactionRequests = await Promise.all(userPromises)
     }
     
-    // user:approve権限がない場合はユーザー一覧を制限
+    // profile:approve権限がない場合はユーザー一覧を制限
     let dashboardUsers: DashboardUser[] = []
-    if (currentUser.permissions?.includes('user:approve')) {
+    if (currentUser.permissions?.includes('profile:approve')) {
       dashboardUsers = pendingUsers as DashboardUser[]
     }
     
