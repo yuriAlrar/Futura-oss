@@ -41,6 +41,7 @@ BTC Mock Appのドキュメント集です。システムの仕様書、利用�
 | `auth_improvement_proposal.md` | 認証システム改善提案書 |
 | `20260819_renovation_design.md` | モバイル対応・円建て統一・セグメント機能 設計ドキュメント |
 | `20260819_renovation_implementation_plan.md` | 上記の実装計画 |
+| `20260930_bugfix_plan.md` | 不具合調査（ページネーション漏れ等）に基づく一斉修正の方針 |
 
 ## 主要仕様書の概要
 
