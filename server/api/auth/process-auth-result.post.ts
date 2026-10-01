@@ -74,7 +74,7 @@ export default defineEventHandler(async (event) => {
     // Set HTTP-only session cookie (only session_id, no tokens)
     setCookie(event, 'session_id', sessionId, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: !import.meta.dev, // ローカル開発(http)のみfalse
       sameSite: 'strict',
       maxAge: 60 * 60 * 24 // 24 hours
     })

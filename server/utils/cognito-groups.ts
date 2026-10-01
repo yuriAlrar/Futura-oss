@@ -10,6 +10,7 @@ import {
   AdminRemoveUserFromGroupCommand,
   AdminGetUserCommand,
   ListUsersInGroupCommand,
+  type AdminListGroupsForUserCommandOutput,
   type ListGroupsCommandOutput,
   type ListUsersInGroupCommandOutput,
   UserNotFoundException
@@ -36,13 +37,23 @@ export const getCognitoGroups = async (username: string): Promise<string[]> => {
     const config = useRuntimeConfig()
     const client = createCognitoClient()
     
-    const command = new AdminListGroupsForUserCommand({
-      UserPoolId: config.cognitoUserPoolId as string,
-      Username: username
-    })
-    
-    const response = await client.send(command)
-    return response.Groups?.map(group => group.GroupName || '') || []
+    // 所属グループが1ページに収まらない場合に備え、NextTokenがなくなるまで取得する
+    const groupNames: string[] = []
+    let nextToken: string | undefined = undefined
+
+    do {
+      const command: AdminListGroupsForUserCommand = new AdminListGroupsForUserCommand({
+        UserPoolId: config.cognitoUserPoolId as string,
+        Username: username,
+        NextToken: nextToken
+      })
+
+      const response = await client.send(command) as AdminListGroupsForUserCommandOutput
+      groupNames.push(...(response.Groups?.map(group => group.GroupName || '') || []))
+      nextToken = response.NextToken
+    } while (nextToken)
+
+    return groupNames
   } catch (error) {
     logger.error(`ユーザー${username}のグループ取得に失敗しました:`, error)
     return []

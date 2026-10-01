@@ -178,15 +178,9 @@ export const verifyAuthTokenFromSession = async (session: Session): Promise<Auth
     if (!permissions || permissions.length === 0 || !groups || groups.length === 0) {
       logger.info('セッションに権限情報がない、DBから取得中...')
       
-      try {
-        groups = await getCognitoGroups(attributes.email || '')
-        logger.success('ステップD: グループを取得しました:', groups)
-      } catch (error) {
-        logger.warn('session検証中にユーザーグループの取得に失敗、フォールバックを使用:', error)
-        // フォールバック: メールパターンで判定
-        groups = attributes.email?.includes('admin') ? ['administrator'] : []
-        logger.info('ステップD: フォールバックグループを使用:', groups)
-      }
+      // 取得に失敗した場合はグループなし（権限なし）として扱う。メールアドレス等からの推測はしない
+      groups = await getCognitoGroups(attributes.email || '')
+      logger.success('ステップD: グループを取得しました:', groups)
       
       logger.info('ステップE: 権限を決定中...')
       permissions = await getUserPermissionsByGroups(groups)
