@@ -64,6 +64,7 @@
 import { ref, watch } from 'vue'
 import { TRANSACTION_STATUS } from '~/types'
 import { formatNumber } from '~/utils/format'
+import { getApprovalErrorMessage } from '~/utils/transaction'
 
 const apiClient = useApiClient()
 
@@ -109,6 +110,16 @@ const rejectRequest = async () => {
       status: TRANSACTION_STATUS.REJECTED,
       rejection_reason: rejectionReason.value
     })
+
+    if (!response.success) {
+      useNotification().showError(getApprovalErrorMessage(response.statusCode, response.error, '拒否処理に失敗しました'))
+      // 他の管理者が処理済みの場合は一覧を更新させる
+      if (response.statusCode === 409) {
+        emit('request-processed')
+        emit('update:modelValue', false)
+      }
+      return
+    }
 
     useNotification().showSuccess(`${props.request.user_name}さんの${props.request.transaction_type === 'deposit' ? '入金' : '出金'}リクエストを拒否しました`)
 

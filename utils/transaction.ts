@@ -133,3 +133,19 @@ export function reduceTransactionsBtc(transactions: any[], targetType?: string):
   const amounts = filtered.map(t => t.amount)
   return calculateBtcSum(amounts)
 }
+
+/**
+ * 取引の承認/拒否APIの失敗レスポンスから表示用メッセージを作る
+ */
+export function getApprovalErrorMessage(statusCode: number | undefined, error: string | undefined, fallback: string): string {
+  if (statusCode === 409) {
+    return 'このリクエストは既に処理されています。一覧を更新しました'
+  }
+  if (statusCode === 400 && error?.startsWith('Insufficient balance')) {
+    return '残高不足のため承認できません'
+  }
+  if (statusCode === 403) {
+    return '承認/拒否の権限がありません'
+  }
+  return error || fallback
+}

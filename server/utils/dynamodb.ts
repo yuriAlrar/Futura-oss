@@ -1,4 +1,4 @@
-import type { DynamoDBDocumentClient} from '@aws-sdk/lib-dynamodb';
+import type { DynamoDBDocumentClient, TransactWriteCommandInput } from '@aws-sdk/lib-dynamodb'
 import { GetCommand, PutCommand, UpdateCommand, DeleteCommand, QueryCommand, ScanCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb'
 import type { RuntimeConfig } from '@nuxt/schema'
 import { createDynamoDBDocumentClient } from './client-factory'
@@ -27,6 +27,17 @@ function resolvePageLimit(maxItems: number | undefined, fetchedCount: number, fi
  */
 function hasReachedLimit(maxItems: number | undefined, fetchedCount: number): boolean {
   return maxItems !== undefined && fetchedCount >= maxItems
+}
+
+/**
+ * TransactWriteがConditionExpressionの不成立でキャンセルされたかどうか
+ */
+export function isTransactionConditionFailed(error: unknown): boolean {
+  if (!error || typeof error !== 'object' || !('name' in error) || error.name !== 'TransactionCanceledException') {
+    return false
+  }
+  const reasons = (error as { CancellationReasons?: Array<{ Code?: string }> }).CancellationReasons || []
+  return reasons.some(reason => reason.Code === 'ConditionalCheckFailed')
 }
 
 class DynamoDBService {
@@ -253,12 +264,7 @@ class DynamoDBService {
   }
 
   // トランザクション操作
-  async transactWrite(items: Array<{
-    Put?: { TableName: string; Item: Record<string, unknown> }
-    Update?: { TableName: string; Key: DynamoDBRecord; UpdateExpression: string; ExpressionAttributeValues: DynamoDBRecord; ExpressionAttributeNames?: Record<string, string> }
-    Delete?: { TableName: string; Key: DynamoDBRecord }
-    ConditionCheck?: { TableName: string; Key: DynamoDBRecord; ConditionExpression: string; ExpressionAttributeValues?: DynamoDBRecord }
-  }>) {
+  async transactWrite(items: NonNullable<TransactWriteCommandInput['TransactItems']>) {
     const command = new TransactWriteCommand({
       TransactItems: items
     })

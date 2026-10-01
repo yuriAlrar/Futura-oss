@@ -124,7 +124,7 @@
 import { ref, computed, onMounted } from 'vue'
 import type { PaginatedResponse } from '~/types'
 import { TRANSACTION_STATUS } from '~/types'
-import { getTransactionTypeLabel } from '~/utils/transaction'
+import { getTransactionTypeLabel, getApprovalErrorMessage } from '~/utils/transaction'
 import { formatNumber } from '~/utils/format'
 
 const logger = useLogger({ prefix: '[ADMIN-TRANSACTION-REQUESTS]' })
@@ -250,6 +250,12 @@ const approveRequest = async (request: EnhancedTransactionRequest) => {
     const response = await apiClient.patch(`/admin/transactions/${request.transaction_id}/status`, {
       status: TRANSACTION_STATUS.APPROVED
     })
+
+    if (!response.success) {
+      useNotification().showError(getApprovalErrorMessage(response.statusCode, response.error, '承認処理に失敗しました'))
+      loadRequests()
+      return
+    }
 
     useNotification().showSuccess(`${request.user_name}さんの${getTransactionTypeLabel(request.transaction_type)}リクエストを承認しました`)
 
