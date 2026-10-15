@@ -1,5 +1,6 @@
 import { deleteCognitoGroup } from '~/server/utils/cognito-groups'
 import { requireAdministrator } from '~/server/utils/auth'
+import { getDynamoDBService } from '~/server/utils/dynamodb'
 import type { ApiResponse } from '~/types'
 
 export default defineEventHandler(async (event): Promise<ApiResponse<void>> => {
@@ -25,6 +26,10 @@ export default defineEventHandler(async (event): Promise<ApiResponse<void>> => {
     }
 
     await deleteCognitoGroup(groupName)
+
+    // 権限レコードも削除する（残っていると同名グループを再作成した際に古い権限が復活するため）
+    const dynamodb = getDynamoDBService()
+    await dynamodb.delete(dynamodb.getTableName('permissions'), { group_name: groupName })
 
     return {
       success: true,

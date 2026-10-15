@@ -1,4 +1,4 @@
-import type { DynamoDBDocumentClient} from '@aws-sdk/lib-dynamodb';
+import type { DynamoDBDocumentClient, TransactWriteCommandInput } from '@aws-sdk/lib-dynamodb'
 import { GetCommand, PutCommand, UpdateCommand, DeleteCommand, QueryCommand, ScanCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb'
 import type { RuntimeConfig } from '@nuxt/schema'
 import { createDynamoDBDocumentClient } from './client-factory'
@@ -9,6 +9,36 @@ type DynamoDBValue = string | number | boolean | null | DynamoDBValue[] | { [key
 type DynamoDBRecord = Record<string, DynamoDBValue>
 
 const logger = useLogger({ prefix: '[DynamoDB]' })
+
+/**
+ * DynamoDBに渡す1ページあたりのLimitを決める
+ * フィルタ式がある場合、DynamoDBのLimitはフィルタ前の評価件数に掛かるため、
+ * 小さい値を渡すと往復回数が膨らむ。そのためフィルタありでは指定せず1MB単位で取得する
+ */
+function resolvePageLimit(maxItems: number | undefined, fetchedCount: number, filterExpression?: string): number | undefined {
+  if (maxItems === undefined || filterExpression) {
+    return undefined
+  }
+  return Math.max(maxItems - fetchedCount, 1)
+}
+
+/**
+ * 返却上限件数に達したかどうか
+ */
+function hasReachedLimit(maxItems: number | undefined, fetchedCount: number): boolean {
+  return maxItems !== undefined && fetchedCount >= maxItems
+}
+
+/**
+ * TransactWriteがConditionExpressionの不成立でキャンセルされたかどうか
+ */
+export function isTransactionConditionFailed(error: unknown): boolean {
+  if (!error || typeof error !== 'object' || !('name' in error) || error.name !== 'TransactionCanceledException') {
+    return false
+  }
+  const reasons = (error as { CancellationReasons?: Array<{ Code?: string }> }).CancellationReasons || []
+  return reasons.some(reason => reason.Code === 'ConditionalCheckFailed')
+}
 
 class DynamoDBService {
   private client: DynamoDBDocumentClient
@@ -79,6 +109,14 @@ class DynamoDBService {
     await this.client.send(command)
   }
 
+  /**
+   * Query実行
+   * - fetchAll（既定true）: LastEvaluatedKeyがなくなるまで全ページを取得する
+   * - limit: 返却する最大件数。指定時は件数に達した時点で取得を打ち切り、itemsをlimit件に切り詰める
+   *   （切り詰めた場合のlastEvaluatedKeyは再開位置として正確ではない）
+   * - fetchAll: false: 1ページのみ取得する
+   * - select: 'COUNT' の場合itemsは空で、countに総件数が入る
+   */
   async query(tableName: string, keyConditionExpression: string, expressionAttributeValues: DynamoDBRecord, options?: {
     indexName?: string
     filterExpression?: string
@@ -87,8 +125,10 @@ class DynamoDBService {
     scanIndexForward?: boolean
     exclusiveStartKey?: Record<string, any>
     fetchAll?: boolean
+    select?: 'ALL_ATTRIBUTES' | 'ALL_PROJECTED_ATTRIBUTES' | 'SPECIFIC_ATTRIBUTES' | 'COUNT'
   }) {
     const fetchAll = options?.fetchAll ?? true
+    const maxItems = options?.limit
     let items: any[] = []
     let lastEvaluatedKey = options?.exclusiveStartKey
     let count = 0
@@ -101,8 +141,9 @@ class DynamoDBService {
         IndexName: options?.indexName,
         FilterExpression: options?.filterExpression,
         ExpressionAttributeNames: options?.expressionAttributeNames,
-        Limit: options?.limit,
+        Limit: resolvePageLimit(maxItems, count, options?.filterExpression),
         ScanIndexForward: options?.scanIndexForward,
+        Select: options?.select,
         ExclusiveStartKey: lastEvaluatedKey
       })
 
@@ -111,8 +152,13 @@ class DynamoDBService {
       lastEvaluatedKey = response.LastEvaluatedKey
       count += response.Count || 0
 
-      // fetchAll が false の場合、または lastEvaluatedKey がなくなった場合は終了
-    } while (fetchAll && lastEvaluatedKey)
+      // fetchAll が false の場合、上限件数に達した場合、または lastEvaluatedKey がなくなった場合は終了
+    } while (fetchAll && lastEvaluatedKey && !hasReachedLimit(maxItems, count))
+
+    if (maxItems !== undefined && items.length > maxItems) {
+      items = items.slice(0, maxItems)
+      count = items.length
+    }
 
     return {
       items,
@@ -121,6 +167,14 @@ class DynamoDBService {
     }
   }
 
+  /**
+   * Scan実行
+   * - fetchAll（既定true）: LastEvaluatedKeyがなくなるまで全ページを取得する
+   * - limit: 返却する最大件数。指定時は件数に達した時点で取得を打ち切り、itemsをlimit件に切り詰める
+   *   （切り詰めた場合のlastEvaluatedKeyは再開位置として正確ではない）
+   * - fetchAll: false: 1ページのみ取得する
+   * - select: 'COUNT' の場合itemsは空で、countに総件数が入る
+   */
   async scan(tableName: string, options?: {
     filterExpression?: string
     expressionAttributeValues?: DynamoDBRecord
@@ -132,6 +186,7 @@ class DynamoDBService {
   }) {
     logger.debug(`Scanコマンド実行: テーブル=${tableName}, Select=${options?.select || 'ALL_ATTRIBUTES'}`)
     const fetchAll = options?.fetchAll ?? true
+    const maxItems = options?.limit
     let items: any[] = []
     let lastEvaluatedKey = options?.exclusiveStartKey
     let count = 0
@@ -143,7 +198,7 @@ class DynamoDBService {
           FilterExpression: options?.filterExpression,
           ExpressionAttributeValues: options?.expressionAttributeValues,
           ExpressionAttributeNames: options?.expressionAttributeNames,
-          Limit: options?.limit,
+          Limit: resolvePageLimit(maxItems, count, options?.filterExpression),
           Select: options?.select,
           ExclusiveStartKey: lastEvaluatedKey
         })
@@ -153,7 +208,12 @@ class DynamoDBService {
         lastEvaluatedKey = response.LastEvaluatedKey
         count += response.Count || 0
 
-      } while (fetchAll && lastEvaluatedKey)
+      } while (fetchAll && lastEvaluatedKey && !hasReachedLimit(maxItems, count))
+
+      if (maxItems !== undefined && items.length > maxItems) {
+        items = items.slice(0, maxItems)
+        count = items.length
+      }
 
       logger.debug(`Scan完了: テーブル=${tableName}, 合計取得レコード数=${count}`)
 
@@ -204,12 +264,7 @@ class DynamoDBService {
   }
 
   // トランザクション操作
-  async transactWrite(items: Array<{
-    Put?: { TableName: string; Item: Record<string, unknown> }
-    Update?: { TableName: string; Key: DynamoDBRecord; UpdateExpression: string; ExpressionAttributeValues: DynamoDBRecord; ExpressionAttributeNames?: Record<string, string> }
-    Delete?: { TableName: string; Key: DynamoDBRecord }
-    ConditionCheck?: { TableName: string; Key: DynamoDBRecord; ConditionExpression: string; ExpressionAttributeValues?: DynamoDBRecord }
-  }>) {
+  async transactWrite(items: NonNullable<TransactWriteCommandInput['TransactItems']>) {
     const command = new TransactWriteCommand({
       TransactItems: items
     })

@@ -95,20 +95,18 @@ const currentPage = ref(1)
 const itemsPerPage = 10
 
 // Options
+// 推移データはサーバーで直近30日分のみ生成しているため、30日より長い期間は選択肢に含めない
 const dateRangeOptions = [
   { label: '7日間', value: '7' },
-  { label: '30日間', value: '30' },
-  { label: '全期間', value: 'all' }
+  { label: '30日間', value: '30' }
 ]
 
 // Computed
 const filteredData = computed(() => {
   let filtered = [...props.data]
 
-  if (dateRange.value !== 'all') {
-    const days = parseInt(dateRange.value)
-    filtered = filtered.slice(-days)
-  }
+  const days = parseInt(dateRange.value)
+  filtered = filtered.slice(-days)
 
   // Sort by date ascending for table display
   filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -120,9 +118,7 @@ const filteredData = computed(() => {
 })
 
 const totalPages = computed(() => {
-  const totalItems = dateRange.value === 'all'
-    ? props.data.length
-    : Math.min(props.data.length, parseInt(dateRange.value))
+  const totalItems = Math.min(props.data.length, parseInt(dateRange.value))
   return Math.ceil(totalItems / itemsPerPage)
 })
 

@@ -1,4 +1,4 @@
-import { getDynamoDBService } from '~/server/utils/dynamodb'
+import { getAllMarketRatesDesc } from '~/server/utils/market-rate-helpers'
 import { useLogger } from '~/composables/useLogger'
 import type { MarketRate, PaginatedResponse } from '~/types'
 
@@ -12,18 +12,7 @@ export default defineEventHandler(async (event) => {
     const page = Number(query.page) || 1
     const limit = Math.min(Number(query.limit) || 50, 100)
 
-    const dynamodb = getDynamoDBService()
-    const tableName = dynamodb.getTableName('market_rates')
-
-    // Get market rates sorted by timestamp (newest first)
-    const result = await dynamodb.scan(tableName, {
-      limit: limit * page // Simple pagination
-    })
-
-    let rates = result.items as MarketRate[]
-    
-    // Sort by timestamp descending (newest first)
-    rates = rates.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    const rates = await getAllMarketRatesDesc()
 
     // Simple pagination logic
     const startIndex = (page - 1) * limit

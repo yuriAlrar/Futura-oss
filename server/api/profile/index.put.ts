@@ -1,6 +1,6 @@
 import { getDynamoDBService } from '~/server/utils/dynamodb'
 import { useLogger } from '~/composables/useLogger'
-import type { UserUpdateForm } from '~/types'
+import type { User, UserUpdateForm } from '~/types'
 
 type DynamoDBValue = string | number | boolean | null | DynamoDBValue[] | { [key: string]: DynamoDBValue }
 type DynamoDBRecord = Record<string, DynamoDBValue>
@@ -36,6 +36,14 @@ export default defineEventHandler(async (event) => {
     const dynamodb = getDynamoDBService()
     const tableName = dynamodb.getTableName('users')
 
+    const currentProfile = await dynamodb.get(tableName, { user_id: currentUser.user_id }) as User | undefined
+    if (!currentProfile) {
+      throw createError({
+        statusCode: 404,
+        statusMessage: 'User profile not found'
+      })
+    }
+
     // Build update expression
     const updateExpressions: string[] = []
     const expressionAttributeValues: DynamoDBRecord = {}
@@ -64,6 +72,17 @@ export default defineEventHandler(async (event) => {
       })
     }
 
+    // 承認済みユーザーが氏名・住所・電話番号を変更した場合は再承認が必要になるため承認を取り消す
+    const isApprovedFieldChanged =
+      (!!body.name && body.name !== currentProfile.name) ||
+      (!!body.address && body.address !== currentProfile.address) ||
+      (!!body.phone_number && body.phone_number !== currentProfile.phone_number)
+    const approvalRevoked = !!currentProfile.profile_approved && isApprovedFieldChanged
+    if (approvalRevoked) {
+      updateExpressions.push('profile_approved = :profile_approved')
+      expressionAttributeValues[':profile_approved'] = false
+    }
+
     // Always update the updated_at timestamp
     updateExpressions.push('updated_at = :updated_at')
     expressionAttributeValues[':updated_at'] = new Date().toISOString()
@@ -81,8 +100,13 @@ export default defineEventHandler(async (event) => {
 
     return {
       success: true,
-      data: updatedUser,
-      message: 'Profile updated successfully'
+      data: {
+        ...updatedUser,
+        approval_revoked: approvalRevoked
+      },
+      message: approvalRevoked
+        ? 'Profile updated successfully. Re-approval by an administrator is required.'
+        : 'Profile updated successfully'
     }
   } catch (error: unknown) {
     logger.error('プロフィール更新エラー:', error)

@@ -333,11 +333,30 @@ const updateProfile = async () => {
   const { valid } = await formRef.value.validate()
   if (!valid) return
 
+  // 承認済みの場合、氏名・住所・電話番号を変更すると再承認が必要になる旨を確認する
+  const isApprovedFieldChanged = !!profile.value && (
+    form.name !== (profile.value.name || '') ||
+    form.address !== (profile.value.address || '') ||
+    form.phone_number !== (profile.value.phone_number || '')
+  )
+  if (profile.value?.profile_approved && isApprovedFieldChanged) {
+    if (!confirm('プロフィールを変更すると承認が取り消され、管理者による再承認が必要になります。再承認までは入金リクエストができません。変更してよろしいですか？')) {
+      return
+    }
+  }
+
   loading.value = true
   try {
-    await apiClient.put('/profile', form)
+    const response = await apiClient.put<{ approval_revoked?: boolean }>('/profile', form)
 
-    showSuccess('プロフィールを更新しました')
+    if (!response.success) {
+      showError(response.error || 'プロフィールの更新に失敗しました')
+      return
+    }
+
+    showSuccess(response.data?.approval_revoked
+      ? 'プロフィールを更新しました。管理者の再承認をお待ちください'
+      : 'プロフィールを更新しました')
     await loadProfile()
   } catch (error: unknown) {
     logger.error('プロフィールの更新に失敗しました:', error)

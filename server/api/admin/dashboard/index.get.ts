@@ -24,12 +24,19 @@ export default defineEventHandler(async (event) => {
     const usersTableName = dynamodb.getTableName('users')
     const sessionsTableName = dynamodb.getTableName('sessions')
     
+    // 承認待ちユーザー（プロフィール未承認）の判定条件
+    // /api/admin/users?profile_approved=pending と同じ条件に揃える
+    const pendingUserFilter = {
+      filterExpression: '#status <> :deleted AND (attribute_not_exists(profile_approved) OR profile_approved = :false)',
+      expressionAttributeNames: { '#status': 'status' },
+      expressionAttributeValues: { ':deleted': 'deleted', ':false': false }
+    }
+
     // 並行して各データを取得
     const [
       pendingTransactionsResult,
-      pendingUsersResult,
       totalPendingTransactionsResult,
-      totalPendingUsersResult,
+      pendingUsersResult,
       recentApprovedTransactionsResult,
       recentUsersResult,
       recentSessionsResult
@@ -46,18 +53,7 @@ export default defineEventHandler(async (event) => {
           limit: 3
         }
       ),
-      
-      // 承認待ちユーザー3件を取得
-      dynamodb.scan(
-        usersTableName,
-        {
-          filterExpression: '#status = :status',
-          expressionAttributeNames: { '#status': 'status' },
-          expressionAttributeValues: { ':status': 'pending' },
-          limit: 3
-        }
-      ),
-      
+
       // 承認待ち入金リクエスト総数を取得
       dynamodb.query(
         transactionsTableName,
@@ -65,20 +61,14 @@ export default defineEventHandler(async (event) => {
         { ':status': TRANSACTION_STATUS.PENDING },
         {
           indexName: 'StatusIndex',
-          expressionAttributeNames: { '#status': 'status' }
-        }
-      ),
-      
-      // 承認待ちユーザー総数を取得
-      dynamodb.scan(
-        usersTableName,
-        {
-          filterExpression: '#status = :status',
           expressionAttributeNames: { '#status': 'status' },
-          expressionAttributeValues: { ':status': 'pending' }
+          select: 'COUNT'
         }
       ),
-      
+
+      // 承認待ちユーザーを全件取得（総数と最新3件の両方に使う）
+      dynamodb.scan(usersTableName, pendingUserFilter),
+
       // 最新の承認済み取引を取得（アクティビティ用）
       dynamodb.query(
         transactionsTableName,
@@ -91,32 +81,34 @@ export default defineEventHandler(async (event) => {
           limit: 3
         }
       ),
-      
+
       // 最新のユーザー登録を取得（アクティビティ用）
+      // scanは順序を保証しないため全件取得してから作成日時でソートする
       dynamodb.scan(
         usersTableName,
         {
           filterExpression: '#status <> :deleted',
           expressionAttributeNames: { '#status': 'status' },
-          expressionAttributeValues: { ':deleted': 'deleted' },
-          limit: 50 // ソート用に多めに取得
+          expressionAttributeValues: { ':deleted': 'deleted' }
         }
       ),
-      
+
       // 最新のアクティブセッションを取得（アクティビティ用）
+      // scanは順序を保証しないため全件取得してからログイン時刻でソートする
       dynamodb.scan(
         sessionsTableName,
         {
           filterExpression: '#status = :status',
           expressionAttributeNames: { '#status': 'status' },
-          expressionAttributeValues: { ':status': 'active' },
-          limit: 50 // ソート用に多めに取得
+          expressionAttributeValues: { ':status': 'active' }
         }
       )
     ])
-    
+
     const pendingTransactions = pendingTransactionsResult.items as EnhancedTransaction[]
-    const pendingUsers = pendingUsersResult.items as User[]
+    const allPendingUsers = (pendingUsersResult.items as User[])
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    const pendingUsers = allPendingUsers.slice(0, 3)
     const recentApprovedTransactions = recentApprovedTransactionsResult.items as EnhancedTransaction[]
     const recentUsers = recentUsersResult.items as User[]
     const recentSessions = recentSessionsResult.items as any[]
@@ -210,16 +202,16 @@ export default defineEventHandler(async (event) => {
       enhancedTransactionRequests = await Promise.all(userPromises)
     }
     
-    // user:approve権限がない場合はユーザー一覧を制限
+    // profile:approve権限がない場合はユーザー一覧を制限
     let dashboardUsers: DashboardUser[] = []
-    if (currentUser.permissions?.includes('user:approve')) {
+    if (currentUser.permissions?.includes('profile:approve')) {
       dashboardUsers = pendingUsers as DashboardUser[]
     }
     
     const dashboardData: AdminDashboardData = {
       stats: {
-        pendingTransactionRequests: totalPendingTransactionsResult.items?.length || 0,
-        pendingUsers: totalPendingUsersResult.items?.length || 0
+        pendingTransactionRequests: totalPendingTransactionsResult.count,
+        pendingUsers: allPendingUsers.length
       },
       recentTransactionRequests: enhancedTransactionRequests,
       pendingUsers: dashboardUsers,

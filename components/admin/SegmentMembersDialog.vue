@@ -106,8 +106,7 @@ const availableUserOptions = computed(() => {
 
 const loadAllUsers = async () => {
   try {
-    const response = await apiClient.get<{ items: User[] }>('/admin/users')
-    allUsers.value = response.data!.items
+    allUsers.value = await apiClient.getAllPages<User>('/admin/users')
   } catch (error) {
     logger.error('ユーザー一覧の読み込みに失敗しました:', error)
     showError('ユーザー一覧の取得に失敗しました')

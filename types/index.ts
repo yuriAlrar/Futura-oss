@@ -17,6 +17,8 @@ export interface User {
   parent_user_id?: string
   // 運用停止ステート（アカウントのログイン可否とは独立。一括操作の対象除外にのみ影響）
   operation_status?: 'active' | 'suspended'
+  // 承認待ちの入出金リクエストID（同時送信による二重作成を防ぐロック。承認/拒否時に解除）
+  pending_request_id?: string
 }
 
 // Transaction status constants

@@ -1,9 +1,25 @@
-import { getDynamoDBService } from '~/server/utils/dynamodb'
+import { getDynamoDBService, isTransactionConditionFailed } from '~/server/utils/dynamodb'
+import { getLatestMarketRate } from '~/server/utils/market-rate-helpers'
 import { useLogger } from '~/composables/useLogger'
 import type { TransactionRequestForm, EnhancedTransaction } from '~/types'
 import { TRANSACTION_STATUS } from '~/types'
 import { generateTransactionId } from '~/server/utils/uuid'
 import { validateTransactionRequest, validateWithdrawalBalance, validateDepositApproval, getTotalBalance } from '~/server/utils/transaction-helpers'
+
+// 1日あたりの入出金リクエスト上限回数
+const DAILY_REQUEST_LIMIT = 50
+
+// JSTのUTCからの時差（ミリ秒）
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000
+
+/**
+ * 指定日時が属するJSTの日の0:00をUTCのISO文字列で返す
+ */
+function getJstStartOfDayISO(date: Date): string {
+  const jstDate = new Date(date.getTime() + JST_OFFSET_MS)
+  jstDate.setUTCHours(0, 0, 0, 0)
+  return new Date(jstDate.getTime() - JST_OFFSET_MS).toISOString()
+}
 
 export default defineEventHandler(async (event) => {
   const logger = useLogger({ prefix: '[TransactionRequest]' })
@@ -30,16 +46,13 @@ export default defineEventHandler(async (event) => {
     
     const dynamodb = getDynamoDBService()
     const transactionsTableName = dynamodb.getTableName('transactions')
-    const marketRatesTableName = dynamodb.getTableName('market_rates')
 
     // リクエスト時点のレートでJPY換算額をスナップショット保存する
     // （現在はレート固定運用のため実質amountと同値だが、将来のレート変動再開に備える）
     let requestedJpyAmount: number | undefined
     try {
-      const ratesResult = await dynamodb.scan(marketRatesTableName)
-      const rates = ratesResult.items as { timestamp: string; btc_jpy_rate: number }[]
-      if (rates.length > 0) {
-        const latestRate = rates.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
+      const latestRate = await getLatestMarketRate()
+      if (latestRate) {
         requestedJpyAmount = Math.round(body.amount * latestRate.btc_jpy_rate)
       }
     } catch (rateError: unknown) {
@@ -68,9 +81,8 @@ export default defineEventHandler(async (event) => {
     }
     
     // 2. 1日あたりのリクエスト回数制限をチェック
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const todayISO = today.toISOString()
+    //    日付の区切りはJSTの0:00とする（サーバーはUTCで動作するため明示的に算出する）
+    const todayISO = getJstStartOfDayISO(new Date())
     
     const todaysRequestsResult = await dynamodb.query(
       transactionsTableName,
@@ -85,10 +97,10 @@ export default defineEventHandler(async (event) => {
       }
     )
     
-    if (todaysRequestsResult.items.length >= 50) {
+    if (todaysRequestsResult.items.length >= DAILY_REQUEST_LIMIT) {
       throw createError({
         statusCode: 429,
-        statusMessage: 'Daily request limit exceeded (5 requests per day)'
+        statusMessage: `Daily request limit exceeded (${DAILY_REQUEST_LIMIT} requests per day)`
       })
     }
     
@@ -110,7 +122,36 @@ export default defineEventHandler(async (event) => {
       requested_jpy_amount: requestedJpyAmount
     }
     
-    await dynamodb.put(transactionsTableName, transactionRequest as any)
+    // 取引の作成とユーザーへのロック設定を同一トランザクションで行う
+    // （承認待ちチェックと作成の間に同時送信されても、2件目はロック条件で失敗する）
+    const usersTableName = dynamodb.getTableName('users')
+    try {
+      await dynamodb.transactWrite([
+        {
+          Put: {
+            TableName: transactionsTableName,
+            Item: transactionRequest as unknown as Record<string, unknown>
+          }
+        },
+        {
+          Update: {
+            TableName: usersTableName,
+            Key: { user_id: currentUser.user_id },
+            UpdateExpression: 'SET pending_request_id = :transaction_id',
+            ConditionExpression: 'attribute_exists(user_id) AND attribute_not_exists(pending_request_id)',
+            ExpressionAttributeValues: { ':transaction_id': transactionId }
+          }
+        }
+      ])
+    } catch (writeError: unknown) {
+      if (isTransactionConditionFailed(writeError)) {
+        throw createError({
+          statusCode: 409,
+          statusMessage: 'You already have a pending transaction request'
+        })
+      }
+      throw writeError
+    }
     
     const transactionTypeJa = body.transaction_type === 'deposit' ? '入金' : '出金'
     logger.info(`${transactionTypeJa}リクエストを作成しました: ${transactionId} - ${currentUser.email} - ${body.amount} BTC`)

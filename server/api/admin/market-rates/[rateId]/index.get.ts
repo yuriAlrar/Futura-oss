@@ -21,11 +21,12 @@ export default defineEventHandler(async (event): Promise<ApiResponse<MarketRate>
     const dynamodb = getDynamoDBService()
     const tableName = dynamodb.getTableName('market_rates')
 
-    // Get market rate by scanning (since we don't have timestamp)
-    const result = await dynamodb.scan(tableName, {
-      filterExpression: 'rate_id = :rate_id',
-      expressionAttributeValues: { ':rate_id': rateId }
-    })
+    // rate_idはパーティションキーのためqueryで取得する
+    const result = await dynamodb.query(
+      tableName,
+      'rate_id = :rate_id',
+      { ':rate_id': rateId }
+    )
 
     if (!result || !result.items || result.items.length === 0) {
       throw createError({

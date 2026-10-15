@@ -16,6 +16,9 @@ interface ApiResponse<T = any> {
   statusCode?: number
 }
 
+// 全ページ取得時の1リクエストあたりの件数（一覧APIの上限値）
+const PAGE_FETCH_LIMIT = 100
+
 export const useApiClient = (options: ApiClientOptions = {}) => {
   const config = useRuntimeConfig()
   const baseURL = options.baseURL || config.public.apiBaseUrl || '/api'
@@ -137,12 +140,45 @@ export const useApiClient = (options: ApiClientOptions = {}) => {
   const del = <T = any>(url: string, headers?: Record<string, string>) =>
     request<T>(url, { method: 'DELETE', headers })
 
+  /**
+   * ページネーションされた一覧APIを全ページ取得する
+   * 一覧APIは1リクエストあたり最大100件のため、hasMoreがfalseになるまでページを繰り返し取得する。
+   * 途中のページで失敗した場合は部分結果を返さず例外を投げる（statusCodeを保持）
+   */
+  const getAllPages = async <T = any>(
+    url: string,
+    params: Record<string, string | number | boolean> = {}
+  ): Promise<T[]> => {
+    const allItems: T[] = []
+    let page = 1
+    let hasMore = true
+
+    while (hasMore) {
+      const response = await get<{ items: T[]; hasMore: boolean }>(url, {
+        params: { ...params, page, limit: PAGE_FETCH_LIMIT }
+      })
+
+      if (!response.success || !response.data) {
+        const error = new Error(response.error || `一覧の取得に失敗しました: ${url}`) as Error & { statusCode?: number }
+        error.statusCode = response.statusCode
+        throw error
+      }
+
+      allItems.push(...response.data.items)
+      hasMore = response.data.hasMore
+      page += 1
+    }
+
+    return allItems
+  }
+
   return {
     request,
     get,
     post,
     put,
     patch,
-    delete: del
+    delete: del,
+    getAllPages
   }
 }

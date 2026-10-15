@@ -48,19 +48,34 @@ export async function listInvites(): Promise<Invite[]> {
 }
 
 /**
- * 招待コードを失効させる
+ * 招待コードを失効させる（有効な招待コードのみ。使用済み/失効済みの状態を上書きしない）
+ * @returns 失効に成功した場合true、有効な招待コードではなかった場合false
  */
-export async function revokeInvite(inviteCode: string): Promise<void> {
+export async function revokeInvite(inviteCode: string): Promise<boolean> {
   const dynamodb = getDynamoDBService()
   const invitesTableName = dynamodb.getTableName('invites')
 
-  await dynamodb.update(
-    invitesTableName,
-    { invite_code: inviteCode },
-    'SET #status = :revoked, revoked_at = :revoked_at',
-    { ':revoked': INVITE_STATUS.REVOKED, ':revoked_at': new Date().toISOString() },
-    { '#status': 'status' }
-  )
+  try {
+    await dynamodb.update(
+      invitesTableName,
+      { invite_code: inviteCode },
+      'SET #status = :revoked, revoked_at = :revoked_at',
+      {
+        ':revoked': INVITE_STATUS.REVOKED,
+        ':revoked_at': new Date().toISOString(),
+        ':active': INVITE_STATUS.ACTIVE
+      },
+      { '#status': 'status' },
+      '#status = :active'
+    )
+    return true
+  } catch (error) {
+    if (error instanceof ConditionalCheckFailedException) {
+      logger.warn(`招待コード ${inviteCode} は有効ではないため失効できません`)
+      return false
+    }
+    throw error
+  }
 }
 
 /**
@@ -93,4 +108,26 @@ export async function consumeInvite(inviteCode: string, userId: string): Promise
     }
     throw error
   }
+}
+
+/**
+ * 使用済みにした招待コードを有効に戻す（登録処理が失敗した場合のロールバック用）
+ * 自分が予約した場合のみ戻す（他のリクエストによる消費を巻き戻さないため）
+ */
+export async function releaseInvite(inviteCode: string, reservationId: string): Promise<void> {
+  const dynamodb = getDynamoDBService()
+  const invitesTableName = dynamodb.getTableName('invites')
+
+  await dynamodb.update(
+    invitesTableName,
+    { invite_code: inviteCode },
+    'SET #status = :active REMOVE consumed_by, consumed_at',
+    {
+      ':active': INVITE_STATUS.ACTIVE,
+      ':consumed': INVITE_STATUS.CONSUMED,
+      ':reservation_id': reservationId
+    },
+    { '#status': 'status' },
+    '#status = :consumed AND consumed_by = :reservation_id'
+  )
 }

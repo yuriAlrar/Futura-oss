@@ -142,24 +142,10 @@ export default defineEventHandler(async (event) => {
       return acc
     }, {} as Record<string, string>)
 
-    // Get user groups from Cognito (with fallback for AWS auth errors)
-    let groups: string[] = []
-    
-    try {
-      groups = await getCognitoGroups(attributes.email || '')
-      logger.debug('ユーザーグループの取得に成功:', groups)
-    } catch (error) {
-      logger.warn('ユーザーグループの取得に失敗、デフォルトの権限を使用:', error)
-      
-      // Fallback: Check if email suggests admin access
-      if (attributes.email?.includes('admin')) {
-        groups = ['administrator']
-        logger.debug('フォールバック: メールパターンから管理者ユーザーを検出')
-      } else {
-        groups = []
-        logger.debug('フォールバック: 標準ユーザー権限を使用')
-      }
-    }
+    // Get user groups from Cognito
+    // 取得に失敗した場合はグループなし（権限なし）として扱う。メールアドレス等からの推測はしない
+    const groups = await getCognitoGroups(attributes.email || '')
+    logger.debug('ユーザーグループを取得:', groups)
 
     // 初回ログイン時の自動同期チェック
     await checkAndSyncIfNeeded(groups, attributes.email || '')
@@ -186,7 +172,7 @@ export default defineEventHandler(async (event) => {
     logger.debug('セッションcookieを設定中...')
     setCookie(event, 'session_id', sessionId, {
       httpOnly: true,
-      secure: false, // localhost環境ではfalse
+      secure: !import.meta.dev, // ローカル開発(http)のみfalse
       sameSite: 'lax', // strictからlaxに変更
       maxAge: 60 * 60 * 24, // 24 hours
       path: '/' // パスを明示的に設定

@@ -61,29 +61,25 @@ export function calculateBalanceAtDate(
 /**
  * ユーザーの現在の残高を取得
  * 承認済み取引のみを対象とする
+ * 取得に失敗した場合は例外を投げる（0で代用すると残高判定を誤るため）
  */
 export async function getTotalBalance(userId: string): Promise<number> {
   const dynamodb = getDynamoDBService()
   const transactionsTableName = dynamodb.getTableName('transactions')
 
-  try {
-    const result = await dynamodb.query(
-      transactionsTableName,
-      'user_id = :user_id',
-      { ':user_id': userId },
-      {
-        indexName: 'UserTimestampIndex'
-      }
-    )
+  const result = await dynamodb.query(
+    transactionsTableName,
+    'user_id = :user_id',
+    { ':user_id': userId },
+    {
+      indexName: 'UserTimestampIndex'
+    }
+  )
 
-    const transactions = result.items as Transaction[]
+  const transactions = result.items as Transaction[]
 
-    // 承認済み取引のみを対象とする（statusが未設定の場合は承認済みとして扱う）
-    return calculateBalance(transactions)
-  } catch (error: unknown) {
-    console.error('[TransactionHelpers-Balance] 残高計算に失敗:', error)
-    return 0
-  }
+  // 承認済み取引のみを対象とする（statusが未設定の場合は承認済みとして扱う）
+  return calculateBalance(transactions)
 }
 
 // ============================================================================

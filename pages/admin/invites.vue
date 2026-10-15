@@ -130,7 +130,12 @@ const revokeInviteItem = async (invite: Invite) => {
   if (!confirm('この招待リンクを失効させますか？')) return
 
   try {
-    await apiClient.delete(`/admin/invites/${invite.invite_code}`)
+    const response = await apiClient.delete(`/admin/invites/${invite.invite_code}`)
+    if (!response.success) {
+      showError(response.statusCode === 409 ? 'この招待リンクは既に使用済みまたは失効済みです' : '招待コードの失効に失敗しました')
+      await loadInvites()
+      return
+    }
     showSuccess('招待リンクを失効しました')
     await loadInvites()
   } catch (error) {

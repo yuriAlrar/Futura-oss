@@ -9,27 +9,48 @@ const logger = useLogger({ prefix: '[BatchHelpers]' })
 
 /**
  * 特定ユーザーの現在の残高を取得
+ * 取得に失敗した場合は例外を投げる（0で代用すると増減額0として黙ってスキップされるため）
  */
 export async function getUserBalance(userId: string): Promise<number> {
   const dynamodb = getDynamoDBService()
   const transactionsTableName = dynamodb.getTableName('transactions')
 
-  try {
-    const result = await dynamodb.query(
-      transactionsTableName,
-      'user_id = :user_id',
-      { ':user_id': userId },
-      {
-        indexName: 'UserTimestampIndex'
-      }
-    )
+  const result = await dynamodb.query(
+    transactionsTableName,
+    'user_id = :user_id',
+    { ':user_id': userId },
+    {
+      indexName: 'UserTimestampIndex'
+    }
+  )
 
-    const transactions = result.items as Transaction[]
-    return calculateBalance(transactions)
-  } catch (error) {
-    logger.error(`ユーザー ${userId} の残高取得エラー:`, error)
-    return 0
+  const transactions = result.items as Transaction[]
+  return calculateBalance(transactions)
+}
+
+// 残高取得の同時実行数
+const BALANCE_FETCH_CONCURRENCY = 10
+
+/**
+ * 同時実行数を制限して非同期処理を実行する（結果は入力順）
+ */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let nextIndex = 0
+
+  const worker = async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex++
+      results[index] = await mapper(items[index])
+    }
   }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker))
+  return results
 }
 
 /**
@@ -220,50 +241,71 @@ export async function createBatchTransactions(
 ): Promise<{ successCount: number; failedCount: number; errors: Array<{ user_id: string; error: string }> }> {
   const now = new Date().toISOString()
   const transactions: Transaction[] = []
+  const preparationErrors: Array<{ user_id: string; error: string }> = []
+  let skippedCount = 0
 
   // 既に処理済みのユーザーを取得（冪等性確保）
   const processedUserIds = await getProcessedUserIds(batchId)
 
-  for (const user of users) {
-    // 既に処理済みならスキップ
+  const targetUsers = users.filter((user) => {
     if (processedUserIds.has(user.user_id)) {
       logger.info(`ユーザー ${user.user_id} は既に処理済み（スキップ）`)
-      continue
+      skippedCount++
+      return false
     }
+    return true
+  })
 
+  // 残高取得を並列実行する（失敗したユーザーは失敗件数に計上する）
+  const balances = await mapWithConcurrency(targetUsers, BALANCE_FETCH_CONCURRENCY, async (user) => {
     try {
-      // 現在の残高を取得
-      const currentBalance = await getUserBalance(user.user_id)
-
-      // 増減額を計算
-      const adjustmentAmount = (currentBalance * adjustmentRate) / 100
-
-      // 増減額が0の場合はスキップ
-      if (adjustmentAmount === 0) {
-        logger.info(`ユーザー ${user.user_id} の増減額が0（スキップ）`)
-        continue
-      }
-
-      // トランザクション作成
-      const transaction: Transaction = {
-        transaction_id: batchId, // 一括処理IDを使用
-        user_id: user.user_id,
-        amount: adjustmentAmount, // 符号付きで保存
-        transaction_type: 'asset_management',
-        timestamp: now,
-        created_by: createdBy,
-        reason: '資産運用',
-        memo: `AMI: ${batchId}${memo ? ` | ${memo}` : ''}`
-      }
-
-      transactions.push(transaction)
+      return await getUserBalance(user.user_id)
     } catch (error) {
-      logger.error(`ユーザー ${user.user_id} のトランザクション作成準備エラー:`, error)
+      logger.error(`ユーザー ${user.user_id} の残高取得エラー:`, error)
+      preparationErrors.push({
+        user_id: user.user_id,
+        error: `残高取得に失敗: ${error instanceof Error ? error.message : String(error)}`
+      })
+      return null
     }
-  }
+  })
 
-  logger.info(`作成するトランザクション数: ${transactions.length}`)
+  targetUsers.forEach((user, index) => {
+    const currentBalance = balances[index]
+    if (currentBalance === null) {
+      return
+    }
+
+    // 増減額を計算
+    const adjustmentAmount = (currentBalance * adjustmentRate) / 100
+
+    // 増減額が0の場合はスキップ
+    if (adjustmentAmount === 0) {
+      logger.info(`ユーザー ${user.user_id} の増減額が0（スキップ）`)
+      skippedCount++
+      return
+    }
+
+    transactions.push({
+      transaction_id: batchId, // 一括処理IDを使用
+      user_id: user.user_id,
+      amount: adjustmentAmount, // 符号付きで保存
+      transaction_type: 'asset_management',
+      timestamp: now,
+      created_by: createdBy,
+      reason: '資産運用',
+      memo: `AMI: ${batchId}${memo ? ` | ${memo}` : ''}`
+    })
+  })
+
+  logger.info(`作成するトランザクション数: ${transactions.length}（スキップ: ${skippedCount}件、残高取得失敗: ${preparationErrors.length}件）`)
 
   // 一括書き込み実行
-  return await batchCreateTransactions(transactions)
+  const result = await batchCreateTransactions(transactions)
+
+  return {
+    successCount: result.successCount,
+    failedCount: result.failedCount + preparationErrors.length,
+    errors: [...preparationErrors, ...result.errors]
+  }
 }

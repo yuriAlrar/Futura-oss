@@ -242,7 +242,7 @@ const canViewTransactionRequests = computed(() => {
 })
 
 const canViewUsers = computed(() => {
-  return user.value?.permissions?.includes('user:approve') || false
+  return user.value?.permissions?.includes('profile:approve') || false
 })
 
 // Legacy computed property removed - stats now displayed directly in titles
